@@ -95,13 +95,18 @@ $script:P03RunId = $null
 # tracked files. It must therefore compare against a baseline instead of
 # requiring a clean tree: a developer legitimately runs the harness while the
 # harness itself is still being edited.
-function Get-RepoStateSignature {
-    $porcelain = (& git -C $RepoRoot status --porcelain 2>&1 | Out-String).TrimEnd()
-    if ([string]::IsNullOrWhiteSpace($porcelain)) { return '' }
-    return (($porcelain -split "`r?`n" | ForEach-Object { $_.TrimEnd() } | Sort-Object) -join "`n")
+#
+# VERIFICATION-FIX-M1: the comparison uses per-file CONTENT digests, not just the
+# `git status` text. A status-only comparison cannot tell "already modified" from
+# "modified again during this run" — both render as ` M path`.
+$script:GitBaseline = Get-WorktreeSnapshot -RepoRoot $RepoRoot
+$script:GitBaselineCount = @($script:GitBaseline.PorcelainEntries).Count
+
+function Get-WorktreeDrift {
+    <# Compares the current tree against the pre-run baseline. #>
+    $now = Get-WorktreeSnapshot -RepoRoot $RepoRoot
+    return Compare-WorktreeSnapshot -Baseline $script:GitBaseline -Current $now
 }
-$script:GitBaseline = Get-RepoStateSignature
-$script:GitBaselineCount = if ($script:GitBaseline) { @($script:GitBaseline -split "`n").Count } else { 0 }
 
 # ---------------------------------------------------------------------------
 # Small helpers
@@ -367,20 +372,11 @@ if ($runP01) {
         }
     }
 
-    Test-Check 'P0-01-07' 'The inventory changed no tracked file (compared to the pre-run baseline)' {
-        $now = Get-RepoStateSignature
-        if ($now -ne $script:GitBaseline) {
-            $before = @($script:GitBaseline -split "`n" | Where-Object { $_ })
-            $after = @($now -split "`n" | Where-Object { $_ })
-            $added = @($after | Where-Object { $before -notcontains $_ })
-            $removed = @($before | Where-Object { $after -notcontains $_ })
-            $detail = @()
-            if ($added.Count -gt 0) { $detail += "new/changed: $($added -join '; ')" }
-            if ($removed.Count -gt 0) { $detail += "no longer present: $($removed -join '; ')" }
-            throw ($detail -join ' | ')
-        }
+    Test-Check 'P0-01-07' 'The inventory changed no tracked file content (per-file digests vs baseline)' {
+        $problems = @(Get-WorktreeDrift)
+        if ($problems.Count -gt 0) { throw ($problems -join ' | ') }
         $note = if ($script:GitBaselineCount -gt 0) { "$($script:GitBaselineCount) pre-existing working-tree entr(y/ies) unchanged by this run" } else { 'working tree was already clean and is still clean' }
-        $note
+        "$note; $($script:GitBaseline.FileCount) tracked files hashed"
     }
 }
 
@@ -572,19 +568,11 @@ if ($runP03) {
 Write-Host ''
 Write-Host '--- global guard -------------------------------------------------' -ForegroundColor Cyan
 
-Test-Check 'P0-GUARD-01' 'Pi runs created/modified/deleted no tracked file in this repo' {
-    $now = Get-RepoStateSignature
-    if ($now -ne $script:GitBaseline) {
-        $before = @($script:GitBaseline -split "`n" | Where-Object { $_ })
-        $after = @($now -split "`n" | Where-Object { $_ })
-        $added = @($after | Where-Object { $before -notcontains $_ })
-        $removed = @($before | Where-Object { $after -notcontains $_ })
-        $detail = @()
-        if ($added.Count -gt 0) { $detail += "new/changed: $($added -join '; ')" }
-        if ($removed.Count -gt 0) { $detail += "no longer present: $($removed -join '; ')" }
-        throw ($detail -join ' | ')
-    }
-    'tracked working-tree state identical before and after all Pi invocations (run state stays in git-ignored paths)'
+Test-Check 'P0-GUARD-01' 'Pi runs changed no tracked file content (per-file digests vs baseline)' {
+    $problems = @(Get-WorktreeDrift)
+    if ($problems.Count -gt 0) { throw ($problems -join ' | ') }
+    "tracked working-tree content identical before and after all Pi invocations " +
+        "($($script:GitBaseline.FileCount) files hashed; run state stays in git-ignored paths)"
 }
 
 # ===========================================================================

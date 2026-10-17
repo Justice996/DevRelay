@@ -1,5 +1,5 @@
 {
-    "generated_at":  "2026-10-17T12:41:03.4673476+08:00",
+    "generated_at":  "2026-10-17T13:07:58.0626602+08:00",
     "phase":  "all",
     "passed":  22,
     "failed":  0,
@@ -40,7 +40,7 @@
                    {
                        "id":  "P0-01-07",
                        "status":  "passed",
-                       "title":  "The inventory changed no tracked file (compared to the pre-run baseline)"
+                       "title":  "The inventory changed no tracked file content (per-file digests vs baseline)"
                    },
                    {
                        "id":  "P0-02-01",
@@ -115,7 +115,7 @@
                    {
                        "id":  "P0-GUARD-01",
                        "status":  "passed",
-                       "title":  "Pi runs created/modified/deleted no tracked file in this repo"
+                       "title":  "Pi runs changed no tracked file content (per-file digests vs baseline)"
                    }
                ]
 }

@@ -32,6 +32,20 @@
       R17  raw mode outside the repo works         -> marker present, Pi sessions still absent
       R18  personal paths / token shapes redacted  -> replaced in output
 
+    VERIFICATION-FIX-M1  worktree integrity must be content-based
+      R19  dirty file edited AGAIN, `git status` string unchanged -> detected
+           (this is the exact gap of a porcelain-only comparison)
+      R20  no change -> no false alarm
+      R21  new untracked file -> detected
+      R22  deleted tracked file -> detected
+
+    VERIFICATION-FIX-M2  evidence export: manifest, raw errors, whole-tree scan
+      R23  whole export dir free of business secret / personal path / exception
+      R24  MANIFEST carries no raw user-profile path
+      R25  raw `state.error` text never exported (class + digest only)
+      R26  export fails closed when a forbidden literal would be written
+      R27  the leak detector itself bites (path / token / literal)
+
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\tests\run-negative-tests.ps1
 #>
@@ -207,6 +221,77 @@ Run-Test 'R13' 'Unknown status typo -> exit 1' {
 }
 
 # ===========================================================================
+# VERIFICATION-FIX-M1: content-based worktree integrity
+# ===========================================================================
+Write-Host ''
+Write-Host '--- VERIFICATION-FIX-M1: content-based worktree integrity -----------' -ForegroundColor Cyan
+
+$m1Repo = Join-Path $env:TEMP ("devrelay-m1-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
+try {
+    New-Item -ItemType Directory -Force -Path $m1Repo | Out-Null
+    & git -C $m1Repo init -q -b main
+    if ($LASTEXITCODE -ne 0) { throw 'git init failed' }
+    [System.IO.File]::WriteAllText((Join-Path $m1Repo 'tracked.txt'), "v1`n")
+    [System.IO.File]::WriteAllText((Join-Path $m1Repo 'other.txt'), "v1`n")
+    & git -C $m1Repo add -A
+    & git -C $m1Repo -c user.email=devrelay@example.invalid -c user.name=devrelay commit -q -m init
+    if ($LASTEXITCODE -ne 0) { throw 'git commit failed' }
+
+    # The developer already has uncommitted work before the verification run.
+    [System.IO.File]::WriteAllText((Join-Path $m1Repo 'tracked.txt'), "v2-already-dirty`n")
+
+    Run-Test 'R19' 'A second edit to an already-dirty file is detected even though `git status` is unchanged' {
+        $baseline = Get-WorktreeSnapshot -RepoRoot $m1Repo
+        $statusBefore = (@($baseline.PorcelainEntries) -join '|')
+
+        # The "verification run" edits the same file again.
+        [System.IO.File]::WriteAllText((Join-Path $m1Repo 'tracked.txt'), "v3-changed-during-run`n")
+        $after = Get-WorktreeSnapshot -RepoRoot $m1Repo
+        $statusAfter = (@($after.PorcelainEntries) -join '|')
+
+        if ($statusBefore -ne $statusAfter) {
+            throw "porcelain strings differ ('$statusBefore' vs '$statusAfter') - the scenario does not reproduce the M1 gap"
+        }
+        $problems = @(Compare-WorktreeSnapshot -Baseline $baseline -Current $after)
+        if ($problems.Count -eq 0) { throw 'content-only change went undetected (M1 regression: status-only comparison)' }
+        if (-not (($problems -join ' ') -match 'tracked\.txt')) { throw "wrong complaint: $($problems -join '; ')" }
+        "porcelain identical ('$statusAfter') yet content drift detected: $($problems -join '; ')"
+    }
+
+    Run-Test 'R20' 'An unchanged tree produces no problems (no false alarm)' {
+        [System.IO.File]::WriteAllText((Join-Path $m1Repo 'tracked.txt'), "v2-already-dirty`n")
+        $baseline = Get-WorktreeSnapshot -RepoRoot $m1Repo
+        $after = Get-WorktreeSnapshot -RepoRoot $m1Repo
+        $problems = @(Compare-WorktreeSnapshot -Baseline $baseline -Current $after)
+        if ($problems.Count -ne 0) { throw "false alarm on an unchanged tree: $($problems -join '; ')" }
+        "$($baseline.FileCount) tracked files hashed, no drift reported"
+    }
+
+    Run-Test 'R21' 'A new untracked file is detected' {
+        $baseline = Get-WorktreeSnapshot -RepoRoot $m1Repo
+        [System.IO.File]::WriteAllText((Join-Path $m1Repo 'appeared.txt'), "new`n")
+        $after = Get-WorktreeSnapshot -RepoRoot $m1Repo
+        $problems = @(Compare-WorktreeSnapshot -Baseline $baseline -Current $after)
+        Remove-Item (Join-Path $m1Repo 'appeared.txt') -Force
+        if ($problems.Count -eq 0) { throw 'a new untracked file went undetected' }
+        $problems -join '; '
+    }
+
+    Run-Test 'R22' 'A deleted tracked file is detected' {
+        $baseline = Get-WorktreeSnapshot -RepoRoot $m1Repo
+        Remove-Item (Join-Path $m1Repo 'other.txt') -Force
+        $after = Get-WorktreeSnapshot -RepoRoot $m1Repo
+        $problems = @(Compare-WorktreeSnapshot -Baseline $baseline -Current $after)
+        if ($problems.Count -eq 0) { throw 'a deleted tracked file went undetected' }
+        if (-not (($problems -join ' ') -match 'other\.txt')) { throw "wrong complaint: $($problems -join '; ')" }
+        $problems -join '; '
+    }
+}
+finally {
+    Remove-Item $m1Repo -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# ===========================================================================
 # VERIFICATION-FIX-03
 # ===========================================================================
 Write-Host ''
@@ -276,6 +361,30 @@ try {
         ('{"timestamp":"2026-10-17T00:00:00+00:00","event":"step_started","step_id":"report_choice","status":""}' + "`n"),
         (New-Object System.Text.UTF8Encoding $false))
 
+    # A second run that failed, whose raw error string embeds a personal path and
+    # an exception frame. NONE of that text may appear in the export; only the
+    # classification, length and digest.
+    New-Item -ItemType Directory -Force -Path (Join-Path $runsDir 'run2') | Out-Null
+    $rawErrorText = "Gate rejected by user at step 'question_gate' -- Exception calling `"Run`" at C:\Users\someone\scripts\x.ps1:12: $marker"
+    [System.IO.File]::WriteAllText((Join-Path $runsDir 'run2\state.json'), (ConvertTo-Json -InputObject ([pscustomobject]@{
+        run_id             = 'run2'
+        workflow_id        = 'devrelay-smoke'
+        status             = 'aborted'
+        current_step_id    = 'question_gate'
+        current_step_index = 1
+        created_at         = '2026-10-17T00:02:00+00:00'
+        updated_at         = '2026-10-17T00:03:00+00:00'
+        error              = $rawErrorText
+        inputs             = [pscustomobject]@{ spec = $marker }
+        step_results       = [pscustomobject]@{
+            question_gate = [pscustomobject]@{
+                type   = 'gate'
+                status = 'failed'
+                output = [pscustomobject]@{ message = $marker; choice = 'reject'; exit_code = $null; stdout = ''; stderr = $marker }
+            }
+        }
+    }) -Depth 8), (New-Object System.Text.UTF8Encoding $false))
+
     $exportScript = Join-Path $RepoRoot 'scripts\export-evidence.ps1'
 
     Run-Test 'R14' 'Safe export contains no prompt / model / business text' {
@@ -335,6 +444,71 @@ try {
         if ($envText -match 'ghp_[A-Za-z0-9]{16,}') { throw 'token shape not redacted' }
         if ($envText -notmatch '%USERPROFILE%') { throw 'path placeholder missing' }
         'path -> %USERPROFILE%, token -> <redacted-token>'
+    }
+
+    Run-Test 'R23' 'Whole export directory is free of business secret, personal path and exception text' {
+        $leaks = New-Object System.Collections.ArrayList
+        foreach ($file in Get-ChildItem $safeOut -Recurse -File) {
+            $text = Get-Content $file.FullName -Raw -Encoding UTF8
+            $rel = $file.FullName.Substring($safeOut.TrimEnd('\').Length).TrimStart('\')
+            if ($text -like "*$marker*") { [void]$leaks.Add("$rel : business marker") }
+            if ($text -match 'C:\\Users\\') { [void]$leaks.Add("$rel : personal path") }
+            if ($text -match 'x\.ps1') { [void]$leaks.Add("$rel : exception frame") }
+        }
+        if ($leaks.Count -gt 0) { throw "leaks found: $($leaks -join '; ')" }
+        $scanned = @(Get-ChildItem $safeOut -Recurse -File).Count
+        "$scanned files scanned, 0 leaks"
+    }
+
+    Run-Test 'R24' 'MANIFEST carries no raw user-profile path' {
+        $manifestText = Get-Content (Join-Path $safeOut 'MANIFEST.md') -Raw -Encoding UTF8
+        if ($manifestText -match 'C:\\Users\\') { throw 'MANIFEST still contains an absolute user path' }
+        if ($manifestText -notmatch '%USERPROFILE%') { throw 'MANIFEST lost the sanitised source path (expected %USERPROFILE%)' }
+        'manifest source path sanitised to %USERPROFILE%'
+    }
+
+    Run-Test 'R25' 'Raw `state.error` text is never exported (classification + digest only)' {
+        $runState = Get-Content (Join-Path $safeOut 'run-state-snapshot.md') -Raw -Encoding UTF8
+        if ($runState -match 'Gate rejected by user at step') { throw 'raw error message exported' }
+        if ($runState -match 'x\.ps1') { throw 'exception frame from the error exported' }
+        if ($runState -notmatch 'gate_rejected') { throw 'error classification missing' }
+        # Single-quoted PowerShell strings do not treat ` as an escape, so the
+        # backticks below are literal markdown backticks.
+        if ($runState -notmatch 'error \| `gate_rejected` \(chars: \d+, sha256: [0-9a-f]{16}') { throw 'error row is not class + length + digest' }
+        if ($runState -notmatch '\| error \| none \|') { throw 'a run without an error should render as none' }
+        'aborted run shows gate_rejected + digest; completed run shows none'
+    }
+
+    Run-Test 'R26' 'Export fails closed when a forbidden literal would be written' {
+        # Plant the marker in a file that the safe path normally exports, then ask
+        # the exporter to forbid it. The file must not be written and the export
+        # must exit non-zero.
+        New-Item -ItemType Directory -Force -Path (Join-Path $evDir 'p0-02') | Out-Null
+        [System.IO.File]::WriteAllText((Join-Path $evDir 'p0-02\integration-status.txt'),
+            "status line $marker`n", (New-Object System.Text.UTF8Encoding $false))
+        $forbidOut = Join-Path $fixture 'out-forbid'
+        & powershell -ExecutionPolicy Bypass -NoProfile -File $exportScript `
+            -EvidenceDir $evDir -RunsDir $runsDir -TargetRoot $forbidOut -ForbidLiteral $marker 2>&1 | Out-Null
+        $code = $LASTEXITCODE
+        if ($code -eq 0) { throw 'export exited 0 although a forbidden literal was present' }
+        if (Test-Path (Join-Path $forbidOut 'p0-02\integration-status.txt')) { throw 'the leaking file was written anyway' }
+        "exit $code, leaking file not written"
+    }
+
+    Run-Test 'R27' 'The leak detector itself bites (path / token / forbidden literal)' {
+        $fakeToken2 = 'gh' + 'p_' + ('B' * 36)
+        $cases = @(
+            @{ Text = "see $env:USERPROFILE\Desktop"; Why = 'user profile path' },
+            @{ Text = "token=$fakeToken2"; Why = 'token shape' },
+            @{ Text = "contains $marker here"; Why = 'forbidden literal' }
+        )
+        foreach ($case in $cases) {
+            $findings = @(Test-SensitiveLeak -Text $case.Text -ForbidLiterals @($marker))
+            if ($findings.Count -eq 0) { throw "detector missed: $($case.Why)" }
+        }
+        $clean = @(Test-SensitiveLeak -Text 'status=completed exit=0 sha256=abc123 %USERPROFILE%' -ForbidLiterals @($marker))
+        if ($clean.Count -ne 0) { throw "detector false-alarmed on clean text: $($clean -join '; ')" }
+        'detects path/token/literal, stays quiet on sanitised text'
     }
 }
 finally {

@@ -1,6 +1,6 @@
 # Verification summary (redacted)
 
-Generated: 2026-10-17T12:41:03.4673476+08:00  
+Generated: 2026-10-17T13:07:58.0626602+08:00  
 Phase: `all`  
 Specify CLI: `%USERPROFILE%\AppData\Local\DevRelay\tools\specify-venv\Scripts\specify.exe`  
 Passed / failed / not_run: **22 / 0 / 0**  
@@ -16,7 +16,7 @@ Verdict: all checks passed
 | P0-01-04 | passed | Spec Kit CLI present and reports a version |
 | P0-01-05 | passed | Pi DeepSeek credentials are ready (no secret recorded) |
 | P0-01-06 | passed | Pi answers a read-only question in an empty temp dir without creating files |
-| P0-01-07 | passed | The inventory changed no tracked file (compared to the pre-run baseline) |
+| P0-01-07 | passed | The inventory changed no tracked file content (per-file digests vs baseline) |
 | P0-02-01 | passed | `specify integration status` reports pi as the default integration |
 | P0-02-02 | passed | Pi prompt templates were installed into .pi/prompts |
 | P0-02-03 | passed | A workflow `prompt` step really dispatches to the local Pi CLI |
@@ -31,4 +31,8 @@ Verdict: all checks passed
 | P0-03-06 | passed | Completed steps were not re-executed on resume (replay only) |
 | P0-03-07 | passed | Gate output is available to later steps ({{ steps.decision_gate.output.choice }}) |
 | P0-03-08 | passed | Reject path: a rejected gate aborts and does not walk past the review |
-| P0-GUARD-01 | passed | Pi runs created/modified/deleted no tracked file in this repo |
+| P0-GUARD-01 | passed | Pi runs changed no tracked file content (per-file digests vs baseline) |
+
+Free-text check details are deliberately not exported (they can quote agent output).
+Reproduce with `powershell -ExecutionPolicy Bypass -File .\scripts\verify-p0.ps1`;
+the full detail stays in the local `.p0-evidence\summary.json`.

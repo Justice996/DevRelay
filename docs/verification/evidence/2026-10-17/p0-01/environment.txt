@@ -1,5 +1,5 @@
 recorded_at: |
-2026-10-17T12:39:09.5012296+08:00
+2026-10-17T13:05:33.3484604+08:00
 os: |
 Microsoft Windows NT 10.0.26200.0
 powershell: |
@@ -273,10 +273,17 @@ Integration status: OK
   Unchecked manifests: 0
   
 git_status: |
- M scripts/export-evidence.ps1
+ M README.md
+   M docs/verification/P0-01-P0-03-integration-report.md
+   M docs/verification/evidence/2026-10-17/MANIFEST.md
+   M docs/verification/evidence/2026-10-17/p0-01/environment.txt
+   M docs/verification/evidence/2026-10-17/run-state-snapshot.md
+   M docs/verification/evidence/2026-10-17/summary.redacted.json
+   M docs/verification/evidence/2026-10-17/verification-summary.md
+   M scripts/export-evidence.ps1
+   M scripts/lib/verification-lib.ps1
    M scripts/verify-p0.ps1
-  ?? scripts/lib/
-  ?? tests/
+   M tests/run-negative-tests.ps1
   
 pi_default_provider: |
 deepseek-proxy

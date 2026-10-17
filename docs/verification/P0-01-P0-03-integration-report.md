@@ -7,8 +7,8 @@
 | 验证范围 | **仅 P0-01、P0-02、P0-03**（未开始 P0-04~P0-07，未开始网页界面） |
 | 验证执行者 | 本地 Pi（DeepSeek）+ 自动化脚本 `scripts/verify-p0.ps1` |
 | 自动化检查结果 | **22 项通过 / 0 失败 / 0 跳过**，脚本退出码 `0` |
-| 反向（回归）测试 | **17 项通过 / 0 失败**，`tests\run-negative-tests.ps1` 退出码 `0` |
-| 审查修订 | PR #1 的三项 MUST FIX 已全部修复（见 §13） |
+| 反向（回归）测试 | **26 项通过 / 0 失败**，`tests\run-negative-tests.ps1` 退出码 `0` |
+| 审查修订 | PR #1 的两轮 MUST FIX 共 5 项已全部修复（见 §13、§15） |
 | 人工结论 | P0-01 通过、P0-02 通过、P0-03 通过；另有 9 项性质明确标为 **未验证**（见 §8） |
 | 生产环境接触 | **无**。未访问生产数据库、未调用部署服务、未提交任何密钥、未自动合并主分支 |
 
@@ -296,7 +296,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\verify-p0.ps1
 
 # 4b) 反向测试（证明上述断言真的会失败）
 powershell -ExecutionPolicy Bypass -File .\tests\run-negative-tests.ps1
-#    -> passed=17 failed=0，退出码 0
+#    -> passed=26 failed=0，退出码 0
 
 # 5) 导出可审查的证据快照（默认安全模式：只写元数据，不写模型输出/业务文本）
 powershell -ExecutionPolicy Bypass -File .\scripts\export-evidence.ps1
@@ -412,3 +412,78 @@ Get-Content .\.specify\workflows\runs\<run_id>\log.jsonl -Encoding UTF8
    `decision_id` + `content_sha256` 作为业务记录的主键；Spec Kit 的 `run_id` 只作为执行证据引用，**不得**成为业务事实的第二份真相源。
 
 该项已列入 §9 的待决策范围：`decision_id` 的生成方式、快照存放位置（文件/Git/未来数据库）需要人类确认后落地。
+
+---
+
+## 15. 第三轮审查修复（M1 / M2）
+
+审查目标提交：`641869d`。本轮只修 M1、M2，未开展 P0-04～06。
+
+### M1 工作区完整性：从"状态字符串"改为"逐文件内容摘要"
+
+**问题（真实缺陷）**：原实现只比较 `git status --porcelain` 文本。同一个文件"运行前已修改"和"运行中又被修改"都渲染成 ` M path`，字符串完全相同 → 检查通过，内容变化被漏掉。
+
+**修复**：`scripts/lib/verification-lib.ps1` 新增
+
+- `Get-WorktreeSnapshot`：同时记录 (a) 排序后的 porcelain 条目，(b) **每个受版本控制文件的工作区内容 SHA-256**（`git ls-files` + 逐文件摘要，缺失文件记为 `<missing>`）；
+- `Compare-WorktreeSnapshot`：同时比对条目集合与内容摘要，任何差异都报为问题。
+
+`P0-01-07` / `P0-GUARD-01` 改用该快照比对，并在明细里输出"hash 了多少文件"。
+
+**保留的能力**：允许开发者带着未提交改动运行验证 —— 基线就是"运行前的脏树"，本轮实际是在工作区有 4 项未提交修改的情况下跑通的（明细：`4 pre-existing working-tree entries unchanged by this run; 50 tracked files hashed`）。
+
+**反向测试**（新增 R19–R22）：
+
+| ID | 场景 | 期望 | 实测 |
+| --- | --- | --- | --- |
+| R19 | 文件运行前已修改，运行中再次修改，`git status` 字符串保持不变 | 必须失败 | porcelain 两边都是 ` M tracked.txt`，内容漂移被检出 ✅ |
+| R20 | 树完全未变 | 不得误报 | 2 个 tracked 文件、无漂移 ✅ |
+| R21 | 新增未跟踪文件 | 必须失败 | `git status gained: ?? appeared.txt` ✅ |
+| R22 | 删除受版本控制文件 | 必须失败 | 条目 + 内容（`<missing>`）双路检出 ✅ |
+
+### M2 证据导出：统一写入口 + 不导出未分类自由文本
+
+**问题**：`MANIFEST.md` 绕过脱敏直接落盘（含 `C:\Users\<name>\...\\.p0-evidence`）；`run-state-snapshot.md` 直接输出 `state.error` 原文片段。
+
+**修复**：
+
+1. **单写入点** `Write-SafeFile`：每个产物（**含 MANIFEST 自身**）都必须经过 `Protect-EvidenceText` → `Test-SensitiveLeak` → 落盘；检测到敏感内容则**不写该文件**并让导出以非 0 退出（fail closed）。
+2. **`state.error` 永不导出原文**：只导出受控分类（`gate_rejected` / `invalid_verdict` / `prompt_timeout` / `timeout` / `nonzero_exit` / `integration_unavailable` / `interrupted` / `contract_violation` / `other` / `none`）+ 字符数 + SHA-256 摘要。实测行：``| error | `gate_rejected` (chars: 45, sha256: 552d709174fe3bea…) |``。
+3. **写入后全目录自检**：导出结束后遍历整个目标目录再跑一次检测，任何命中都使退出码为 1。
+4. **未分类自由文本默认不导出**：检查详情、失败详情、`summary.json` 原文、运行记录原文、Pi 会话全部不导出，只导出状态/退出码/时间线/摘要。
+5. 新增 `-ForbidLiteral`：调用方可指定"绝不允许出现"的字面量（供测试与 CI 使用）。
+6. 导出明细中注明"MANIFEST 无法自列"，避免误以为清单不完整。
+
+**反向测试**（新增 R23–R27，全部扫描**整个导出目录**）：
+
+| ID | 场景 | 期望 | 实测 |
+| --- | --- | --- | --- |
+| R23 | fixture 内植入业务秘密 + 个人路径 + 异常栈帧 | 全目录扫描零命中 | 7 个文件扫描，0 泄漏 ✅ |
+| R24 | MANIFEST 不得含未脱敏用户目录 | 无 `C:\Users\`，且出现 `%USERPROFILE%` | `Source evidence` 行为 `%USERPROFILE%\Desktop\DevRelay\.p0-evidence` ✅ |
+| R25 | `state.error` 原文不得导出 | 无原文/栈帧，只有分类+长度+摘要；无错误 run 显示 `none` | ✅ |
+| R26 | 把植入标记放进"正常会导出"的文件并要求禁止 | 导出退出码非 0 且该文件不落盘 | `exit 1, leaking file not written` ✅ |
+| R27 | 泄漏检测器本身是否真能咬住 | 路径/token/字面量必须命中；已脱敏文本不得误报 | ✅ |
+
+### 实际退出码（本轮复跑）
+
+| 套件 | 结果 | 退出码 |
+| --- | --- | --- |
+| `scripts/verify-p0.ps1`（P0-01/02/03 + 全局护栏） | 22 passed / 0 failed / 0 not_run，`verdict: all checks passed` | **0** |
+| `tests/run-negative-tests.ps1` | 26 passed / 0 failed | **0** |
+| `scripts/export-evidence.ps1`（安全模式） | 7 文件导出，3 处脱敏，11 项扣留，自检通过 | **0** |
+| 同上 + `-ForbidLiteral <植入标记>`（R26 内部调用） | 刻意制造泄漏场景 | **1**（符合 fail-closed 预期） |
+
+正常路径未受影响：P0-01/02/03 的 22 项断言与上一轮含义一致，仅 `P0-01-07`/`P0-GUARD-01` 的比较方式更严格（逐文件内容摘要），实测在有未提交改动的工作区下仍通过。
+
+### 关于"脱敏能保证什么"的边界（不夸大）
+
+静态正则/字面量检测**不能**保证任意业务秘密绝对不泄露。本轮的保证来自策略而非正则：**无法安全分类的自由文本一律不导出**；检测器只作为最后一道防线（fail closed）。明确**仍未验证**的边界：
+
+1. 内容摘要只覆盖 **tracked** 文件。运行前后都处于"未跟踪但未忽略"状态的文件，其内容变化不会被检出（只检测新增/删除条目）。
+2. `.specify/workflows/runs/` 与 `.p0-evidence/` 属故意忽略的路径，**不做完整性校验**——工作流本来就要往那里写。
+3. 符号链接目标变化、子模块指针、纯权限位变化未验证（权限位会经 porcelain 体现，但未做针对性测试）。
+4. 仅看内容：纯 mtime 变化按设计不算漂移。
+5. 归因限制：基线是脚本启动时取的，运行期间**其他人/进程**的修改也会被归因为"本次运行造成"。
+6. 白名单文件（`environment.txt` / `integration-status.txt` / `workflow-info.txt`）的"无业务内容"判断针对 **Spec Kit 1.2.1 + Pi 0.86.1** 的实测输出；若未来版本在 `--help`/`status` 中回显提示词，需重新评估。
+7. 仅在 Windows（10.0.26200 + PowerShell 5.1）验证；跨平台换行重规范化（`core.autocrlf`）对摘要的影响未验证。
+8. raw 模式只在本地路径（`%TEMP%`）验证过拒绝/放行，网络盘/UNC 路径未验证。

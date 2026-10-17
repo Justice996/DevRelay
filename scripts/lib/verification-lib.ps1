@@ -217,7 +217,148 @@ function Protect-EvidenceText {
     [pscustomobject]@{ Text = $result; Replacements = $count }
 }
 
+function Get-WorktreeSnapshot {
+    <#
+        Snapshot of the tracked working tree that is sensitive to CONTENT, not
+        just to `git status` text (VERIFICATION-FIX-M1).
+
+        Why: `git status --porcelain` collapses "already modified" and "modified
+        again" into the same string (` M path`). A run that edits an
+        already-dirty file would be invisible to a status-only comparison.
+
+        Returns:
+          PorcelainEntries - sorted porcelain lines (additions/deletions/renames)
+          Files            - repo-relative path -> SHA-256 of the worktree bytes
+                             ('<missing>' when the tracked file is absent)
+          FileCount        - number of tracked files hashed
+    #>
+    param([Parameter(Mandatory)][string]$RepoRoot)
+
+    $porcelainRaw = (& git -C $RepoRoot status --porcelain 2>&1 | Out-String).TrimEnd()
+    $entries = @()
+    if (-not [string]::IsNullOrWhiteSpace($porcelainRaw)) {
+        $entries = @($porcelainRaw -split "`r?`n" | ForEach-Object { $_.TrimEnd() } | Sort-Object)
+    }
+
+    # core.quotePath=false keeps non-ASCII file names literal instead of
+    # octal-escaped, so the same file maps to the same key in both snapshots.
+    $trackedRaw = & git -C $RepoRoot -c core.quotePath=false ls-files 2>&1
+    $files = @{}
+    foreach ($rel in @($trackedRaw)) {
+        if ([string]::IsNullOrWhiteSpace($rel)) { continue }
+        $rel = $rel.TrimEnd("`r")
+        $full = Join-Path $RepoRoot $rel
+        if (Test-Path -LiteralPath $full -PathType Leaf) {
+            $digest = Get-TextDigest -Path $full
+            $files[$rel] = $digest.Sha256
+        } else {
+            $files[$rel] = '<missing>'
+        }
+    }
+
+    [pscustomobject]@{
+        PorcelainEntries = $entries
+        Files            = $files
+        FileCount        = $files.Count
+    }
+}
+
+function Compare-WorktreeSnapshot {
+    <#
+        Returns an array of human-readable problems (empty == identical).
+
+        Catches:
+          * entries added/removed from `git status` (new/deleted/renamed files)
+          * CONTENT changes to any tracked file, including files that were
+            already dirty in the baseline snapshot (the M1 gap)
+    #>
+    param(
+        [Parameter(Mandatory)][object]$Baseline,
+        [Parameter(Mandatory)][object]$Current
+    )
+
+    $problems = New-Object System.Collections.ArrayList
+
+    $beforeEntries = @($Baseline.PorcelainEntries)
+    $afterEntries = @($Current.PorcelainEntries)
+    $newEntries = @($afterEntries | Where-Object { $beforeEntries -notcontains $_ })
+    $goneEntries = @($beforeEntries | Where-Object { $afterEntries -notcontains $_ })
+    if ($newEntries.Count -gt 0) { [void]$problems.Add("git status gained: $($newEntries -join '; ')") }
+    if ($goneEntries.Count -gt 0) { [void]$problems.Add("git status lost: $($goneEntries -join '; ')") }
+
+    $beforeFiles = $Baseline.Files
+    $afterFiles = $Current.Files
+    $allPaths = @(@($beforeFiles.Keys) + @($afterFiles.Keys) | Sort-Object -Unique)
+    $changed = New-Object System.Collections.ArrayList
+    foreach ($path in $allPaths) {
+        $was = if ($beforeFiles.ContainsKey($path)) { $beforeFiles[$path] } else { '<absent>' }
+        $now = if ($afterFiles.ContainsKey($path)) { $afterFiles[$path] } else { '<absent>' }
+        if ($was -ne $now) { [void]$changed.Add($path) }
+    }
+    if ($changed.Count -gt 0) {
+        [void]$problems.Add("tracked file content changed: $(($changed | Sort-Object) -join '; ')")
+    }
+
+    return @($problems)
+}
+
+function Test-SensitiveLeak {
+    <#
+        Last line of defence for evidence that is about to be published.
+
+        This is a *detector*, not a guarantee: it can only find what it is told
+        to look for (explicit literals, the current user profile path, token
+        shapes). Free text that cannot be classified safely must not be exported
+        at all — that is a policy decision made by the caller, not by this
+        function.
+
+        Returns an array of finding descriptions (empty == nothing detected).
+        Finding text never echoes the sensitive value itself.
+    #>
+    param(
+        [AllowEmptyString()][string]$Text,
+        [string[]]$ForbidLiterals = @(),
+        [string]$UserProfilePath = $env:USERPROFILE
+    )
+
+    $findings = New-Object System.Collections.ArrayList
+    if ([string]::IsNullOrEmpty($Text)) { return @($findings) }
+
+    foreach ($literal in $ForbidLiterals) {
+        if ([string]::IsNullOrEmpty($literal)) { continue }
+        if ($Text.IndexOf($literal, [System.StringComparison]::Ordinal) -ge 0) {
+            [void]$findings.Add("an explicitly forbidden literal is present (length $($literal.Length))")
+        }
+    }
+
+    if (-not [string]::IsNullOrEmpty($UserProfilePath)) {
+        $variants = @($UserProfilePath, ($UserProfilePath -replace '\\', '/'))
+        foreach ($variant in $variants) {
+            if ($Text.IndexOf($variant, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                [void]$findings.Add('the local user profile path is present')
+                break
+            }
+        }
+    }
+
+    $tokenPatterns = @(
+        'gh[pousr]_[A-Za-z0-9]{16,}',
+        'github_pat_[A-Za-z0-9_]{16,}',
+        'sk-[A-Za-z0-9]{16,}',
+        'AKIA[0-9A-Z]{16}',
+        'xox[baprs]-[A-Za-z0-9-]{10,}'
+    )
+    foreach ($pattern in $tokenPatterns) {
+        if ([regex]::IsMatch($Text, $pattern)) { [void]$findings.Add('a credential-shaped token is present') }
+    }
+
+    return @($findings)
+}
+
 function Get-TextDigest {
+    <#
+        Length + SHA-256 of a string or file, for provenance without content.
+    #>
     <#
         Length + SHA-256 of a string or file, for provenance without content.
     #>

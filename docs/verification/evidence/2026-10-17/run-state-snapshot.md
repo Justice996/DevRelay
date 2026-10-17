@@ -1,8 +1,9 @@
 # Spec Kit run state snapshot (metadata only)
 
-Prompt text, business answers and captured model output are deliberately omitted.
-`stdout` / `stderr` are represented by byte count + SHA-256 so a reviewer can prove the
-captured streams existed and were not edited, without publishing their content.
+Prompt text, business answers, captured model output and raw engine error strings are
+deliberately omitted. `stdout` / `stderr` are represented by byte count + SHA-256, and
+`error` is represented by a controlled classification + digest, so a reviewer can prove
+a failure occurred and was not edited, without publishing its content.
 
 ## run `020a02ca` — `devrelay-p0-02-capture-probe`
 
@@ -12,6 +13,7 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `capture_probe` (index 0) |
 | created_at | 2026-10-17T03:17:47.263486+00:00 |
 | updated_at | 2026-10-17T03:17:51.591364+00:00 |
+| error | none |
 | input names | `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
@@ -32,8 +34,8 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `question_gate` (index 1) |
 | created_at | 2026-10-17T03:19:50.068742+00:00 |
 | updated_at | 2026-10-17T03:20:15.196082+00:00 |
-| error | `Gate rejected by user at step 'question_gate'` |
-| input names | `spec`, `product_answer`, `question_verdict`, `decision_verdict` |
+| error | `gate_rejected` (chars: 45, sha256: 552d709174fe3bea…) |
+| input names | `decision_verdict`, `product_answer`, `question_verdict`, `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -52,6 +54,45 @@ captured streams existed and were not edited, without publishing their content.
 2026-10-17T03:20:15.116011+00:00  workflow_finished   aborted
 ```
 
+## run `0806e9c2` — `devrelay-smoke`
+
+| field | value |
+| --- | --- |
+| status | `completed` |
+| current_step | `report_choice` (index 4) |
+| created_at | 2026-10-17T05:06:13.146413+00:00 |
+| updated_at | 2026-10-17T05:07:27.741301+00:00 |
+| error | none |
+| input names | `decision_verdict`, `product_answer`, `question_verdict`, `spec` |
+
+| step | type | status | exit_code | dispatched | captured stdout | captured stderr |
+| --- | --- | --- | --- | --- | --- | --- |
+| identify_business_gap | prompt | completed | 0 | True |  |  |
+| question_gate | gate | completed |  |  |  |  |
+| propose_architecture | prompt | completed | 0 | True |  |  |
+| decision_gate | gate | completed |  |  |  |  |
+| report_choice | prompt | completed | 0 | True |  |  |
+
+```text
+2026-10-17T05:06:13.249709+00:00  step_started       identify_business_gap 
+2026-10-17T05:06:29.123955+00:00  step_completed     identify_business_gap completed
+2026-10-17T05:06:29.139746+00:00  step_started       question_gate 
+2026-10-17T05:06:29.155169+00:00  step_completed     question_gate paused
+2026-10-17T05:06:29.163008+00:00  workflow_finished   paused
+2026-10-17T05:06:30.819701+00:00  step_started       question_gate 
+2026-10-17T05:06:30.861503+00:00  step_completed     question_gate completed
+2026-10-17T05:06:30.900213+00:00  step_started       propose_architecture 
+2026-10-17T05:07:03.822937+00:00  step_completed     propose_architecture completed
+2026-10-17T05:07:03.842023+00:00  step_started       decision_gate 
+2026-10-17T05:07:03.860524+00:00  step_completed     decision_gate paused
+2026-10-17T05:07:03.872547+00:00  workflow_finished   paused
+2026-10-17T05:07:05.295115+00:00  step_started       decision_gate 
+2026-10-17T05:07:05.336021+00:00  step_completed     decision_gate completed
+2026-10-17T05:07:05.382863+00:00  step_started       report_choice 
+2026-10-17T05:07:27.726353+00:00  step_completed     report_choice completed
+2026-10-17T05:07:27.734182+00:00  workflow_finished   completed
+```
+
 ## run `17105496` — `devrelay-p0-02-capture-probe`
 
 | field | value |
@@ -60,6 +101,7 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `capture_probe` (index 0) |
 | created_at | 2026-10-17T03:18:23.665178+00:00 |
 | updated_at | 2026-10-17T03:18:27.914473+00:00 |
+| error | none |
 | input names | `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
@@ -80,8 +122,8 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `question_gate` (index 1) |
 | created_at | 2026-10-17T03:15:26.920615+00:00 |
 | updated_at | 2026-10-17T03:15:48.274819+00:00 |
-| error | `Gate rejected by user at step 'question_gate'` |
-| input names | `spec`, `product_answer`, `question_verdict`, `decision_verdict` |
+| error | `gate_rejected` (chars: 45, sha256: 552d709174fe3bea…) |
+| input names | `decision_verdict`, `product_answer`, `question_verdict`, `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -108,6 +150,7 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `capture_probe` (index 0) |
 | created_at | 2026-10-17T04:39:38.378622+00:00 |
 | updated_at | 2026-10-17T04:39:41.914063+00:00 |
+| error | none |
 | input names | `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
@@ -120,6 +163,27 @@ captured streams existed and were not edited, without publishing their content.
 2026-10-17T04:39:41.905659+00:00  workflow_finished   completed
 ```
 
+## run `2d32f2d5` — `devrelay-p0-02-probe`
+
+| field | value |
+| --- | --- |
+| status | `completed` |
+| current_step | `read_only_probe` (index 0) |
+| created_at | 2026-10-17T05:01:47.010728+00:00 |
+| updated_at | 2026-10-17T05:01:51.696866+00:00 |
+| error | none |
+| input names | `spec` |
+
+| step | type | status | exit_code | dispatched | captured stdout | captured stderr |
+| --- | --- | --- | --- | --- | --- | --- |
+| read_only_probe | prompt | completed | 0 | True |  |  |
+
+```text
+2026-10-17T05:01:47.091208+00:00  step_started       read_only_probe 
+2026-10-17T05:01:51.664115+00:00  step_completed     read_only_probe completed
+2026-10-17T05:01:51.683715+00:00  workflow_finished   completed
+```
+
 ## run `3f3e5a61` — `devrelay-smoke`
 
 | field | value |
@@ -128,8 +192,8 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `question_gate` (index 1) |
 | created_at | 2026-10-17T03:23:08.348696+00:00 |
 | updated_at | 2026-10-17T03:23:21.742904+00:00 |
-| error | `Gate rejected by user at step 'question_gate'` |
-| input names | `spec`, `product_answer`, `question_verdict`, `decision_verdict` |
+| error | `gate_rejected` (chars: 45, sha256: 552d709174fe3bea…) |
+| input names | `decision_verdict`, `product_answer`, `question_verdict`, `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -156,8 +220,8 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `question_gate` (index 1) |
 | created_at | 2026-10-17T04:38:36.113864+00:00 |
 | updated_at | 2026-10-17T04:38:52.350256+00:00 |
-| error | `Gate rejected by user at step 'question_gate'` |
-| input names | `spec`, `product_answer`, `question_verdict`, `decision_verdict` |
+| error | `gate_rejected` (chars: 45, sha256: 552d709174fe3bea…) |
+| input names | `decision_verdict`, `product_answer`, `question_verdict`, `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -176,6 +240,27 @@ captured streams existed and were not edited, without publishing their content.
 2026-10-17T04:38:52.335314+00:00  workflow_finished   aborted
 ```
 
+## run `5654ddf5` — `devrelay-p0-02-capture-probe`
+
+| field | value |
+| --- | --- |
+| status | `completed` |
+| current_step | `capture_probe` (index 0) |
+| created_at | 2026-10-17T05:01:53.406204+00:00 |
+| updated_at | 2026-10-17T05:01:58.986374+00:00 |
+| error | none |
+| input names | `spec` |
+
+| step | type | status | exit_code | dispatched | captured stdout | captured stderr |
+| --- | --- | --- | --- | --- | --- | --- |
+| capture_probe | prompt | completed | 0 | True | 3B sha256:a12b7cb43c9d… |  |
+
+```text
+2026-10-17T05:01:53.539501+00:00  step_started       capture_probe 
+2026-10-17T05:01:58.964292+00:00  step_completed     capture_probe completed
+2026-10-17T05:01:58.972675+00:00  workflow_finished   completed
+```
+
 ## run `57c6370a` — `devrelay-p0-02-probe`
 
 | field | value |
@@ -184,6 +269,7 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `read_only_probe` (index 0) |
 | created_at | 2026-10-17T03:12:40.073661+00:00 |
 | updated_at | 2026-10-17T03:12:45.578852+00:00 |
+| error | none |
 | input names | `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
@@ -204,6 +290,7 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `capture_probe` (index 0) |
 | created_at | 2026-10-17T03:21:21.595029+00:00 |
 | updated_at | 2026-10-17T03:21:25.881485+00:00 |
+| error | none |
 | input names | `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
@@ -224,8 +311,8 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `question_gate` (index 1) |
 | created_at | 2026-10-17T03:13:39.165850+00:00 |
 | updated_at | 2026-10-17T03:13:53.923831+00:00 |
-| error | `Gate rejected by user at step 'question_gate'` |
-| input names | `spec`, `product_answer`, `question_verdict`, `decision_verdict` |
+| error | `gate_rejected` (chars: 45, sha256: 552d709174fe3bea…) |
+| input names | `decision_verdict`, `product_answer`, `question_verdict`, `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -249,7 +336,8 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `report_choice` (index 4) |
 | created_at | 2026-10-17T03:21:33.141742+00:00 |
 | updated_at | 2026-10-17T03:23:05.281031+00:00 |
-| input names | `spec`, `product_answer`, `question_verdict`, `decision_verdict` |
+| error | none |
+| input names | `decision_verdict`, `product_answer`, `question_verdict`, `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -287,8 +375,8 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `question_gate` (index 1) |
 | created_at | 2026-10-17T04:40:43.820384+00:00 |
 | updated_at | 2026-10-17T04:41:00.947981+00:00 |
-| error | `Gate rejected by user at step 'question_gate'` |
-| input names | `spec`, `product_answer`, `question_verdict`, `decision_verdict` |
+| error | `gate_rejected` (chars: 45, sha256: 552d709174fe3bea…) |
+| input names | `decision_verdict`, `product_answer`, `question_verdict`, `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -307,6 +395,66 @@ captured streams existed and were not edited, without publishing their content.
 2026-10-17T04:41:00.939556+00:00  workflow_finished   aborted
 ```
 
+## run `922a364e` — `devrelay-p0-02-probe`
+
+| field | value |
+| --- | --- |
+| status | `completed` |
+| current_step | `read_only_probe` (index 0) |
+| created_at | 2026-10-17T05:05:58.155782+00:00 |
+| updated_at | 2026-10-17T05:06:01.965622+00:00 |
+| error | none |
+| input names | `spec` |
+
+| step | type | status | exit_code | dispatched | captured stdout | captured stderr |
+| --- | --- | --- | --- | --- | --- | --- |
+| read_only_probe | prompt | completed | 0 | True |  |  |
+
+```text
+2026-10-17T05:05:58.238975+00:00  step_started       read_only_probe 
+2026-10-17T05:06:01.946047+00:00  step_completed     read_only_probe completed
+2026-10-17T05:06:01.955761+00:00  workflow_finished   completed
+```
+
+## run `99544051` — `devrelay-smoke`
+
+| field | value |
+| --- | --- |
+| status | `completed` |
+| current_step | `report_choice` (index 4) |
+| created_at | 2026-10-17T05:02:03.240833+00:00 |
+| updated_at | 2026-10-17T05:03:39.582444+00:00 |
+| error | none |
+| input names | `decision_verdict`, `product_answer`, `question_verdict`, `spec` |
+
+| step | type | status | exit_code | dispatched | captured stdout | captured stderr |
+| --- | --- | --- | --- | --- | --- | --- |
+| identify_business_gap | prompt | completed | 0 | True |  |  |
+| question_gate | gate | completed |  |  |  |  |
+| propose_architecture | prompt | completed | 0 | True |  |  |
+| decision_gate | gate | completed |  |  |  |  |
+| report_choice | prompt | completed | 0 | True |  |  |
+
+```text
+2026-10-17T05:02:03.317596+00:00  step_started       identify_business_gap 
+2026-10-17T05:02:16.412131+00:00  step_completed     identify_business_gap completed
+2026-10-17T05:02:16.431040+00:00  step_started       question_gate 
+2026-10-17T05:02:16.451606+00:00  step_completed     question_gate paused
+2026-10-17T05:02:16.460128+00:00  workflow_finished   paused
+2026-10-17T05:02:17.765060+00:00  step_started       question_gate 
+2026-10-17T05:02:17.795387+00:00  step_completed     question_gate completed
+2026-10-17T05:02:17.825739+00:00  step_started       propose_architecture 
+2026-10-17T05:03:07.062426+00:00  step_completed     propose_architecture completed
+2026-10-17T05:03:07.081906+00:00  step_started       decision_gate 
+2026-10-17T05:03:07.102772+00:00  step_completed     decision_gate paused
+2026-10-17T05:03:07.111312+00:00  workflow_finished   paused
+2026-10-17T05:03:10.117810+00:00  step_started       decision_gate 
+2026-10-17T05:03:10.272744+00:00  step_completed     decision_gate completed
+2026-10-17T05:03:10.435606+00:00  step_started       report_choice 
+2026-10-17T05:03:39.540096+00:00  step_completed     report_choice completed
+2026-10-17T05:03:39.560662+00:00  workflow_finished   completed
+```
+
 ## run `a6ae2440` — `devrelay-p0-02-probe`
 
 | field | value |
@@ -315,6 +463,7 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `read_only_probe` (index 0) |
 | created_at | 2026-10-17T04:37:07.909246+00:00 |
 | updated_at | 2026-10-17T04:37:12.518953+00:00 |
+| error | none |
 | input names | `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
@@ -335,8 +484,8 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `question_gate` (index 1) |
 | created_at | 2026-10-17T03:12:54.577244+00:00 |
 | updated_at | 2026-10-17T03:13:12.318655+00:00 |
-| error | `Gate rejected by user at step 'question_gate'` |
-| input names | `spec`, `product_answer`, `question_verdict`, `decision_verdict` |
+| error | `gate_rejected` (chars: 45, sha256: 552d709174fe3bea…) |
+| input names | `decision_verdict`, `product_answer`, `question_verdict`, `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -352,6 +501,27 @@ captured streams existed and were not edited, without publishing their content.
 2026-10-17T03:13:12.311953+00:00  workflow_finished   aborted
 ```
 
+## run `b44e5b69` — `devrelay-p0-02-capture-probe`
+
+| field | value |
+| --- | --- |
+| status | `completed` |
+| current_step | `capture_probe` (index 0) |
+| created_at | 2026-10-17T05:06:04.389652+00:00 |
+| updated_at | 2026-10-17T05:06:08.327692+00:00 |
+| error | none |
+| input names | `spec` |
+
+| step | type | status | exit_code | dispatched | captured stdout | captured stderr |
+| --- | --- | --- | --- | --- | --- | --- |
+| capture_probe | prompt | completed | 0 | True | 3B sha256:a12b7cb43c9d… |  |
+
+```text
+2026-10-17T05:06:04.512435+00:00  step_started       capture_probe 
+2026-10-17T05:06:08.313860+00:00  step_completed     capture_probe completed
+2026-10-17T05:06:08.320706+00:00  workflow_finished   completed
+```
+
 ## run `bfae1471` — `devrelay-smoke`
 
 | field | value |
@@ -360,7 +530,8 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `report_choice` (index 4) |
 | created_at | 2026-10-17T03:18:37.267769+00:00 |
 | updated_at | 2026-10-17T03:19:44.784345+00:00 |
-| input names | `spec`, `product_answer`, `question_verdict`, `decision_verdict` |
+| error | none |
+| input names | `decision_verdict`, `product_answer`, `question_verdict`, `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -398,6 +569,7 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `read_only_probe` (index 0) |
 | created_at | 2026-10-17T03:17:41.137063+00:00 |
 | updated_at | 2026-10-17T03:17:44.806328+00:00 |
+| error | none |
 | input names | `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
@@ -418,6 +590,7 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `capture_probe` (index 0) |
 | created_at | 2026-10-17T04:37:14.711647+00:00 |
 | updated_at | 2026-10-17T04:37:19.066950+00:00 |
+| error | none |
 | input names | `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
@@ -438,6 +611,7 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `read_only_probe` (index 0) |
 | created_at | 2026-10-17T04:39:31.973595+00:00 |
 | updated_at | 2026-10-17T04:39:36.224876+00:00 |
+| error | none |
 | input names | `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
@@ -458,7 +632,8 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `report_choice` (index 4) |
 | created_at | 2026-10-17T04:37:23.515390+00:00 |
 | updated_at | 2026-10-17T04:38:31.573464+00:00 |
-| input names | `spec`, `product_answer`, `question_verdict`, `decision_verdict` |
+| error | none |
+| input names | `decision_verdict`, `product_answer`, `question_verdict`, `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -496,7 +671,8 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `report_choice` (index 4) |
 | created_at | 2026-10-17T04:39:45.968454+00:00 |
 | updated_at | 2026-10-17T04:40:40.328264+00:00 |
-| input names | `spec`, `product_answer`, `question_verdict`, `decision_verdict` |
+| error | none |
+| input names | `decision_verdict`, `product_answer`, `question_verdict`, `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -534,7 +710,8 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `report_choice` (index 4) |
 | created_at | 2026-10-17T03:13:59.919972+00:00 |
 | updated_at | 2026-10-17T03:15:20.216076+00:00 |
-| input names | `spec`, `product_answer`, `question_verdict`, `decision_verdict` |
+| error | none |
+| input names | `decision_verdict`, `product_answer`, `question_verdict`, `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -572,6 +749,7 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `read_only_probe` (index 0) |
 | created_at | 2026-10-17T03:21:12.933785+00:00 |
 | updated_at | 2026-10-17T03:21:19.000200+00:00 |
+| error | none |
 | input names | `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
@@ -592,6 +770,7 @@ captured streams existed and were not edited, without publishing their content.
 | current_step | `read_only_probe` (index 0) |
 | created_at | 2026-10-17T03:18:16.947996+00:00 |
 | updated_at | 2026-10-17T03:18:21.309087+00:00 |
+| error | none |
 | input names | `spec` |
 
 | step | type | status | exit_code | dispatched | captured stdout | captured stderr |
@@ -602,4 +781,60 @@ captured streams existed and were not edited, without publishing their content.
 2026-10-17T03:18:17.010502+00:00  step_started       read_only_probe 
 2026-10-17T03:18:21.290361+00:00  step_completed     read_only_probe completed
 2026-10-17T03:18:21.299672+00:00  workflow_finished   completed
+```
+
+## run `da687c21` — `devrelay-smoke`
+
+| field | value |
+| --- | --- |
+| status | `aborted` |
+| current_step | `question_gate` (index 1) |
+| created_at | 2026-10-17T05:03:44.785700+00:00 |
+| updated_at | 2026-10-17T05:04:08.038385+00:00 |
+| error | `gate_rejected` (chars: 45, sha256: 552d709174fe3bea…) |
+| input names | `decision_verdict`, `product_answer`, `question_verdict`, `spec` |
+
+| step | type | status | exit_code | dispatched | captured stdout | captured stderr |
+| --- | --- | --- | --- | --- | --- | --- |
+| identify_business_gap | prompt | completed | 0 | True |  |  |
+| question_gate | gate | failed |  |  |  |  |
+
+```text
+2026-10-17T05:03:44.919337+00:00  step_started       identify_business_gap 
+2026-10-17T05:04:05.504041+00:00  step_completed     identify_business_gap completed
+2026-10-17T05:04:05.522773+00:00  step_started       question_gate 
+2026-10-17T05:04:05.541237+00:00  step_completed     question_gate paused
+2026-10-17T05:04:05.549963+00:00  workflow_finished   paused
+2026-10-17T05:04:07.931038+00:00  step_started       question_gate 
+2026-10-17T05:04:07.974806+00:00  step_completed     question_gate failed
+2026-10-17T05:04:07.988958+00:00  workflow_aborted   question_gate 
+2026-10-17T05:04:08.018914+00:00  workflow_finished   aborted
+```
+
+## run `fa20064e` — `devrelay-smoke`
+
+| field | value |
+| --- | --- |
+| status | `aborted` |
+| current_step | `question_gate` (index 1) |
+| created_at | 2026-10-17T05:07:31.496629+00:00 |
+| updated_at | 2026-10-17T05:07:53.417500+00:00 |
+| error | `gate_rejected` (chars: 45, sha256: 552d709174fe3bea…) |
+| input names | `decision_verdict`, `product_answer`, `question_verdict`, `spec` |
+
+| step | type | status | exit_code | dispatched | captured stdout | captured stderr |
+| --- | --- | --- | --- | --- | --- | --- |
+| identify_business_gap | prompt | completed | 0 | True |  |  |
+| question_gate | gate | failed |  |  |  |  |
+
+```text
+2026-10-17T05:07:31.625942+00:00  step_started       identify_business_gap 
+2026-10-17T05:07:52.060485+00:00  step_completed     identify_business_gap completed
+2026-10-17T05:07:52.075554+00:00  step_started       question_gate 
+2026-10-17T05:07:52.091478+00:00  step_completed     question_gate paused
+2026-10-17T05:07:52.099043+00:00  workflow_finished   paused
+2026-10-17T05:07:53.360135+00:00  step_started       question_gate 
+2026-10-17T05:07:53.390262+00:00  step_completed     question_gate failed
+2026-10-17T05:07:53.397778+00:00  workflow_aborted   question_gate 
+2026-10-17T05:07:53.408673+00:00  workflow_finished   aborted
 ```
