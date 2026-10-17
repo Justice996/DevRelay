@@ -55,11 +55,16 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
+# Shared, unit-tested primitives (parsing, strict assertions, exit policy,
+# redaction). tests\run-negative-tests.ps1 exercises the same file, so a check
+# that silently cannot fail is caught.
+
 # ---------------------------------------------------------------------------
 # Paths and environment discovery
 # ---------------------------------------------------------------------------
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'lib\verification-lib.ps1')
 if ([string]::IsNullOrWhiteSpace($EvidenceDir)) {
     $EvidenceDir = Join-Path $RepoRoot '.p0-evidence'
 } elseif (-not [System.IO.Path]::IsPathRooted($EvidenceDir)) {
@@ -84,6 +89,19 @@ $PiExe = (Get-Command pi -ErrorAction SilentlyContinue).Source
 $script:Results = New-Object System.Collections.ArrayList
 $script:P02Model = $null
 $script:P03RunId = $null
+
+# Baseline of the tracked working tree, taken before any check runs. The point of
+# P0-01-07 / P0-GUARD-01 is to prove that *this verification run* did not touch
+# tracked files. It must therefore compare against a baseline instead of
+# requiring a clean tree: a developer legitimately runs the harness while the
+# harness itself is still being edited.
+function Get-RepoStateSignature {
+    $porcelain = (& git -C $RepoRoot status --porcelain 2>&1 | Out-String).TrimEnd()
+    if ([string]::IsNullOrWhiteSpace($porcelain)) { return '' }
+    return (($porcelain -split "`r?`n" | ForEach-Object { $_.TrimEnd() } | Sort-Object) -join "`n")
+}
+$script:GitBaseline = Get-RepoStateSignature
+$script:GitBaselineCount = if ($script:GitBaseline) { @($script:GitBaseline -split "`n").Count } else { 0 }
 
 # ---------------------------------------------------------------------------
 # Small helpers
@@ -349,11 +367,20 @@ if ($runP01) {
         }
     }
 
-    Test-Check 'P0-01-07' 'No tracked file was modified by the inventory' {
-        $dirty = (& git -C $RepoRoot status --porcelain 2>&1 | Out-String).Trim()
-        $modified = @($dirty -split "`n" | Where-Object { $_ -match '^\s*(M|A|D|R)\s' })
-        if ($modified.Count -gt 0) { throw "tracked changes present: $($modified -join '; ')" }
-        'working tree has no staged/modified tracked files'
+    Test-Check 'P0-01-07' 'The inventory changed no tracked file (compared to the pre-run baseline)' {
+        $now = Get-RepoStateSignature
+        if ($now -ne $script:GitBaseline) {
+            $before = @($script:GitBaseline -split "`n" | Where-Object { $_ })
+            $after = @($now -split "`n" | Where-Object { $_ })
+            $added = @($after | Where-Object { $before -notcontains $_ })
+            $removed = @($before | Where-Object { $after -notcontains $_ })
+            $detail = @()
+            if ($added.Count -gt 0) { $detail += "new/changed: $($added -join '; ')" }
+            if ($removed.Count -gt 0) { $detail += "no longer present: $($removed -join '; ')" }
+            throw ($detail -join ' | ')
+        }
+        $note = if ($script:GitBaselineCount -gt 0) { "$($script:GitBaselineCount) pre-existing working-tree entr(y/ies) unchanged by this run" } else { 'working tree was already clean and is still clean' }
+        $note
     }
 }
 
@@ -432,10 +459,22 @@ if ($runP03) {
     $runId = $null
     $phaseLog = New-Object System.Text.StringBuilder
 
-    Test-Check 'P0-03-01' 'Smoke workflow parses against the installed Spec Kit version' {
+    Test-Check 'P0-03-01' 'Smoke workflow parses and its step graph matches the reviewed contract (strict)' {
         $res = Invoke-Specify -Arguments @('workflow', 'info', $smoke)
-        Save-Evidence -Name 'p0-03\workflow-info.txt' -Content (& $SpecifyExe workflow info $smoke 2>&1 | Out-String) | Out-Null
-        (($res.StdOut -split "`n") | Where-Object { $_ -match 'Steps \(|→' } | ForEach-Object { $_.Trim() }) -join ' | '
+        Save-Evidence -Name 'p0-03\workflow-info.txt' -Content ("--- exit: " + $res.ExitCode + "`n--- stdout ---`n" + $res.StdOut + "`n--- stderr ---`n" + $res.StdErr) | Out-Null
+
+        # Strict: exit code, workflow id, declared step count, step id order and
+        # step type order. Any mismatch fails the check (see P0-03-01N..03-05N in
+        # tests\run-negative-tests.ps1 for the proof that these assertions bite).
+        $problems = Test-WorkflowInfoStrict -ExitCode $res.ExitCode -StdOut $res.StdOut -StdErr $res.StdErr `
+            -ExpectedWorkflowId 'devrelay-smoke' `
+            -ExpectedStepIds @('identify_business_gap', 'question_gate', 'propose_architecture', 'decision_gate', 'report_choice') `
+            -ExpectedStepTypes @('prompt', 'gate', 'prompt', 'gate', 'prompt')
+        if (@($problems).Count -gt 0) { throw ($problems -join '; ') }
+
+        $info = ConvertFrom-WorkflowInfoText -Text ($res.StdOut + "`n" + $res.StdErr)
+        "exit=0; workflow id=$($info.WorkflowId); $($info.DeclaredCount) steps in order: " +
+            (($info.Steps | ForEach-Object { "$($_.Id)[$($_.Type)]" }) -join ' -> ')
     }
 
     Test-Check 'P0-03-02' 'Phase 1 (process A): run pauses at question_gate' {
@@ -528,6 +567,27 @@ if ($runP03) {
 }
 
 # ===========================================================================
+# Global guard: this run must not have modified any tracked file
+# ===========================================================================
+Write-Host ''
+Write-Host '--- global guard -------------------------------------------------' -ForegroundColor Cyan
+
+Test-Check 'P0-GUARD-01' 'Pi runs created/modified/deleted no tracked file in this repo' {
+    $now = Get-RepoStateSignature
+    if ($now -ne $script:GitBaseline) {
+        $before = @($script:GitBaseline -split "`n" | Where-Object { $_ })
+        $after = @($now -split "`n" | Where-Object { $_ })
+        $added = @($after | Where-Object { $before -notcontains $_ })
+        $removed = @($before | Where-Object { $after -notcontains $_ })
+        $detail = @()
+        if ($added.Count -gt 0) { $detail += "new/changed: $($added -join '; ')" }
+        if ($removed.Count -gt 0) { $detail += "no longer present: $($removed -join '; ')" }
+        throw ($detail -join ' | ')
+    }
+    'tracked working-tree state identical before and after all Pi invocations (run state stays in git-ignored paths)'
+}
+
+# ===========================================================================
 # Summary
 # ===========================================================================
 Write-Host ''
@@ -541,6 +601,17 @@ $notRun = @($script:Results | Where-Object { $_.Status -eq 'not_run' }).Count
 $script:Results | Format-Table -AutoSize Id, Status, Title | Out-String -Width 200 | Write-Host
 Write-Host ("passed={0}  failed={1}  not_run={2}" -f $passed, $failed, $notRun)
 
+# A required check that did not execute is NOT a pass: exit 0 requires
+# every recorded check to be 'passed'.
+$exitCode = Get-VerificationExitCode -Results $script:Results
+$exitReason = Get-VerificationExitReason -Results $script:Results
+Write-Host "verdict: $exitReason"
+if ($exitCode -ne 0) {
+    Write-Host 'RESULT: FAIL (not_run is treated as not verified, never as passed)' -ForegroundColor Red
+} else {
+    Write-Host 'RESULT: PASS' -ForegroundColor Green
+}
+
 $summaryPath = Save-Evidence -Name 'summary.json' -Content (ConvertTo-Json -InputObject ([pscustomobject]@{
     generated_at = (Get-Date).ToString('o')
     phase        = $Phase
@@ -549,9 +620,10 @@ $summaryPath = Save-Evidence -Name 'summary.json' -Content (ConvertTo-Json -Inpu
     passed       = $passed
     failed       = $failed
     not_run      = $notRun
+    exit_code    = $exitCode
+    verdict      = $exitReason
     checks       = $script:Results
 }) -Depth 5)
 Write-Host "summary: $summaryPath"
 
-if ($failed -gt 0) { exit 1 }
-exit 0
+exit $exitCode

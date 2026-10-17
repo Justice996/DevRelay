@@ -6,12 +6,14 @@
 | 分支 | `feat/v0.1-agent-integration` |
 | 验证范围 | **仅 P0-01、P0-02、P0-03**（未开始 P0-04~P0-07，未开始网页界面） |
 | 验证执行者 | 本地 Pi（DeepSeek）+ 自动化脚本 `scripts/verify-p0.ps1` |
-| 自动化检查结果 | **21 项通过 / 0 失败 / 0 跳过**，脚本退出码 `0` |
+| 自动化检查结果 | **22 项通过 / 0 失败 / 0 跳过**，脚本退出码 `0` |
+| 反向（回归）测试 | **17 项通过 / 0 失败**，`tests\run-negative-tests.ps1` 退出码 `0` |
+| 审查修订 | PR #1 的三项 MUST FIX 已全部修复（见 §13） |
 | 人工结论 | P0-01 通过、P0-02 通过、P0-03 通过；另有 9 项性质明确标为 **未验证**（见 §8） |
 | 生产环境接触 | **无**。未访问生产数据库、未调用部署服务、未提交任何密钥、未自动合并主分支 |
 
 验证证据（可审计副本）：`docs/verification/evidence/2026-10-17/`（含 `MANIFEST.md` 与各文件 SHA-256）。
-原始 Pi 会话记录（含完整提示词与模型原文）**不进入仓库**，只留在本地 `.p0-evidence/`；重新执行即可再生。
+**证据只以脱敏/元数据形式入库**：不写提示词、不写业务答复、不写模型输出，只保留状态、退出码、时间线以及捕获流的字节数与 SHA-256（详见 §13 与 `MANIFEST.md`）。原始 Pi 会话与原始运行记录只留在本地 `.p0-evidence/`，重新执行即可再生。
 
 ---
 
@@ -22,7 +24,8 @@
 | P0-01 环境清点 | **通过** | `P0-01-01` … `P0-01-07` |
 | P0-02 Spec Kit ↔ Pi 原生集成 | **通过** | `P0-02-01` … `P0-02-06` |
 | P0-03 Gate 暂停与恢复 | **通过** | `P0-03-01` … `P0-03-08` |
-| 提供的 YAML 兼容性 | **无需任何修改即可运行** | `P0-03-01`（`specify workflow info` 退出码 0），文件 SHA-256 `28F8187B…320D16D` 与收到时一致 |
+| 全局护栏：本次运行未改动任何受版本控制的文件 | **通过** | `P0-GUARD-01` |
+| 提供的 YAML 兼容性 | **无需任何修改即可运行** | `P0-03-01`（严格断言：退出码 0 + 工作流 id + 5 个步骤的 id/类型顺序全部匹配），文件 SHA-256 `28F8187B…320D16D` 与收到时一致 |
 
 一句话结论：**Spec Kit 1.2.1 的原生 `pi` 集成确实驱动了本机 Pi 0.86.1 + DeepSeek 模型；两次人工审批节点分别完成 pause → resume，且跨进程（等价于关闭终端后重启）可以续跑；被拒绝的审批不会越过。**
 
@@ -43,7 +46,7 @@
 | 模型供应商 / 模型 | `deepseek-proxy` / `deepseek-v4.1-flash-expires-on-0910`（thinking=high） | 记录（见 §7 风险 R1） |
 | 凭据就绪性 | `pi auth check --json` → `{"status":"ready","provider":"deepseek-proxy","authType":"api_key"}`（**未读取、未记录密钥值**） | `P0-01-05` ✅ |
 | 只读问答 | 在临时空目录中 `pi -p --no-session --tools read,grep,find,ls` → 退出码 0，有中文回答，**目录前后文件数 0 → 0** | `P0-01-06` ✅ |
-| 工作区完整性 | 清点前后无被修改的受版本控制文件 | `P0-01-07` ✅ |
+| 工作区完整性 | 与运行前基线相比，清点过程**没有改动任何受版本控制的文件**（工作区原本的未提交改动被允许，但不允许被本次运行新增/改变/删除） | `P0-01-07` ✅ + `P0-GUARD-01` ✅ |
 
 说明：本机起始状态**未安装** Spec Kit（`specify`/`uv` 均不存在）。按官方 `docs/installation.md` 的 PyPI 路线，以**隔离 venv** 安装并锁定版本 `specify-cli==1.2.1`，venv 位于仓库之外（`%LOCALAPPDATA%\DevRelay\tools\specify-venv`），不进入 Git。
 
@@ -65,10 +68,10 @@
 | --- | --- | --- |
 | `P0-02-01` | `specify integration status` 报告 `pi` | 通过 |
 | `P0-02-02` | `.pi/prompts/` 已安装命令模板 | 通过（10 个） |
-| `P0-02-03` | `prompt` 步骤真实派发到本机 Pi | 通过（run `d5268d9c`，`status=completed`，`dispatched=true`，`exit_code=0`） |
+| `P0-02-03` | `prompt` 步骤真实派发到本机 Pi | 通过（run `a6ae2440`，`status=completed`，`dispatched=true`，`exit_code=0`） |
 | `P0-02-04` | Pi 实际使用的模型有独立证据 | 通过（Pi 会话 `model_change` 事件 = `deepseek-proxy/deepseek-v4.1-flash-expires-on-0910`） |
 | `P0-02-05` | 提示词由工作流文件承载，无人工复制粘贴到 Pi | 通过（工作流声明 `type: prompt` + `integration: pi`，脚本从未向交互式 Pi 会话输入文本） |
-| `P0-02-06` | `capture: true` 能把模型文本带回 `steps.<id>.output.stdout` | 通过（run `6df6aafe`，捕获到 `OK`） |
+| `P0-02-06` | `capture: true` 能把模型文本带回 `steps.<id>.output.stdout` | 通过（run `c7bb434d`，捕获到 `OK`） |
 
 ### 3.3 派发机制（读源码确认，不是猜测）
 
@@ -99,26 +102,26 @@ pi -p "<渲染后的提示词>"  [SPECKIT_INTEGRATION_PI_EXTRA_ARGS 追加]  [--
 
 ### 4.2 三轮独立进程（等价于关闭终端后重启）
 
-run `7c0167a8`（自动化脚本执行，全部为不同的 OS 进程）：
+run `cbd0b65d`（审查修复后重跑，全部为不同的 OS 进程）：
 
 | 进程 | 命令 | 结果 | 退出码 |
 | --- | --- | --- | --- |
 | A | `specify workflow run <yaml> --input spec=… --json` | `status=paused`，`current_step_id=question_gate`，`gate.choice=null` | 0 |
-| B | `specify workflow resume 7c0167a8 --input question_verdict=approve --input product_answer=… --json` | `status=paused`，`current_step_id=decision_gate` | 0 |
-| C | `specify workflow resume 7c0167a8 --input decision_verdict=A --json` | `status=completed` | 0 |
+| B | `specify workflow resume cbd0b65d --input question_verdict=approve --input product_answer=… --json` | `status=paused`，`current_step_id=decision_gate` | 0 |
+| C | `specify workflow resume cbd0b65d --input decision_verdict=A --json` | `status=completed` | 0 |
 
-`specify workflow status 7c0167a8 --json` 显示 5/5 步骤 `completed`。
+`specify workflow status cbd0b65d --json` 显示 5/5 步骤 `completed`。
 执行日志（`log.jsonl`）证明**已完成步骤没有重跑**：
 
 ```text
-03:21:33 step_started  identify_business_gap
-03:21:59 step_completed identify_business_gap completed
-03:21:59 step_completed question_gate paused      ← 第一次暂停
-03:22:02 step_completed question_gate completed   ← resume 消费 verdict
-03:22:47 step_completed decision_gate paused      ← 第二次暂停
-03:22:48 step_completed decision_gate completed   ← resume 消费 verdict
-03:23:05 step_completed report_choice completed
-03:23:05 workflow_finished completed
+04:37:23 step_started     identify_business_gap
+04:37:50 step_completed   identify_business_gap completed
+04:37:51 step_completed   question_gate paused      ← 第一次暂停
+04:37:52 step_completed   question_gate completed   ← resume 消费 verdict
+04:38:14 step_completed   decision_gate paused      ← 第二次暂停
+04:38:17 step_completed   decision_gate completed   ← resume 消费 verdict
+04:38:31 step_completed   report_choice completed
+04:38:31 workflow_finished completed
 ```
 
 统计断言：`identify_business_gap` **只启动 1 次**、`propose_architecture` **只启动 1 次**（且严格在第一次审批通过后）、`question_gate` 启动 2 次（暂停一次 + 消费 verdict 一次）。这正是"暂停—恢复不重复执行已完成步骤"的证据。
@@ -129,7 +132,7 @@ run `7c0167a8`（自动化脚本执行，全部为不同的 OS 进程）：
 
 ### 4.4 拒绝路径（关键安全性质）
 
-run `3f3e5a61`：run 暂停在 `question_gate` → `resume --input question_verdict=reject` → `status=aborted`，退出码 **1**，`error: Gate rejected by user at step 'question_gate'`，`steps` 里**只存在** `identify_business_gap`(completed) 与 `question_gate`(failed)，`propose_architecture`/`decision_gate`/`report_choice` 完全没有启动（`P0-03-08`）。
+run `5223705e`：run 暂停在 `question_gate` → `resume --input question_verdict=reject` → `status=aborted`，退出码 **1**，`error: Gate rejected by user at step 'question_gate'`，`steps` 里**只存在** `identify_business_gap`(completed) 与 `question_gate`(failed)，`propose_architecture`/`decision_gate`/`report_choice` 完全没有启动（`P0-03-08`）。
 → **被拒绝的审批不会越过，也不会静默降级为"通过"。**
 
 ### 4.5 附带得到的真实产出（人工预跑，run `d511e16a`）
@@ -285,13 +288,20 @@ git status
 #    非空目录必须加 --force，且只做合并、不删除已有文件
 & $env:SPECIFY_BIN init --here --integration pi --non-interactive --force --script ps
 
-# 4) 全量验证（P0-01 + P0-02 + P0-03，含拒绝路径）
+# 4) 全量验证（P0-01 + P0-02 + P0-03 + 全局护栏）
 powershell -ExecutionPolicy Bypass -File .\scripts\verify-p0.ps1
-#    -> passed=21 failed=0 not_run=0，退出码 0
+#    -> passed=22 failed=0 not_run=0，verdict: all checks passed，退出码 0
 #    可选单阶段：-Phase p0-01 | p0-02 | p0-03
+#    注意：not_run（必需检查未执行）与 failed 同样返回退出码 1
 
-# 5) 导出可审查的证据快照（剔除原始 Pi 会话）
+# 4b) 反向测试（证明上述断言真的会失败）
+powershell -ExecutionPolicy Bypass -File .\tests\run-negative-tests.ps1
+#    -> passed=17 failed=0，退出码 0
+
+# 5) 导出可审查的证据快照（默认安全模式：只写元数据，不写模型输出/业务文本）
 powershell -ExecutionPolicy Bypass -File .\scripts\export-evidence.ps1
+#    如需本地排查原始文本（不得入库）：
+#    .\scripts\export-evidence.ps1 -IncludeModelOutput -TargetRoot "$env:TEMP\devrelay-evidence-raw"
 
 # 6) 手工复现"两次暂停 + 两次恢复"（关键：stdin 必须是管道，不能是 < NUL）
 $spec = '实现用户向朋友转赠优惠券，一张券不能被重复领取'
@@ -321,6 +331,7 @@ Get-Content .\.specify\workflows\runs\<run_id>\log.jsonl -Encoding UTF8
 - 验证期间 Pi 被 `--tools read,grep,find,ls` 强制只读，**技术上无法**写文件或执行 shell；
 - 所有 Spec Kit 工作流只用 `prompt` + `gate`，**未使用** `shell` 步骤（按官方安全说明，`shell` 不是沙箱）；
 - 只在功能分支 `feat/v0.1-agent-integration` 上提交，未改动 `main`，未自动合并；
+- 入仓证据**只含元数据**：不写提示词、不写业务答复、不写模型输出；个人路径与 token 形状被替换；原始 Pi 会话在任何模式下都不导出；raw 模式拒绝写入仓库（`-IncludeModelOutput` 守卫）；
 - 未开始任何网页界面开发。
 
 ---
@@ -331,3 +342,73 @@ Get-Content .\.specify\workflows\runs\<run_id>\log.jsonl -Encoding UTF8
 2. P0-04 起对需要入库的模型输出步骤开启 `capture: true`（已验证可用），并在模型输出后加**确定性校验步骤**（JSON Schema），不信任模型自述。
 3. 为"业务问题卡"引入 `requires.speckit_version` 与运行封装，把"必须用管道 stdin"写成代码级约束。
 4. 保持 `.py` 校验脚本（PS 5.1 对中文 `.ps1` 需 UTF-8 BOM——本轮踩过一次，脚本已带 BOM）。
+
+---
+
+## 13. PR #1 审查修复记录
+
+审查结论：「P0-01～03 基础集成达到预期，但建议修复以下问题后再合并」。三项 MUST FIX 已全部修复，并各自配套了**反向测试**（证明缺陷真的能被抓到）。
+
+### FIX-01 P0-03-01 没有检查退出码与完整步骤信息
+
+- **问题**：原实现只把 `workflow info` 的几行输出当“描述性文本”返回，退出码非 0、步骤缺失、步骤顺序/类型漂移都不会失败。
+- **修复**：新增 `scripts/lib/verification-lib.ps1`，把 `specify workflow info` 解析与断言做成可单测的纯函数 `ConvertFrom-WorkflowInfoText` / `Test-WorkflowInfoStrict`。现在 `P0-03-01` 严格断言 **退出码 = 0、工作流 id = `devrelay-smoke`、声明步骤数 = 实际解析数、5 个步骤 id 顺序、5 个步骤类型顺序**；解析失败也会直接失败（防止 Spec Kit 升级后解析静默返回空列表）。
+- **反向测试**：`R02` 非 0 退出码、`R03` 少一个步骤、`R04` 步骤顺序错、`R05` gate 被降级成 prompt、`R06` 输出不可解析、`R07` 工作流 id 不符 —— 全部必须被拒；`R01` 用合法输入防止“永远失败”的假检查。
+- **附带修复**：`P0-01-07` 原本要求工作区干净，等于把“开发者正在改脚本”误判成失败（本轮实际踩到：`M scripts/...` 导致 `P0-01-07` 失败）。现在改为**与运行前基线比对**：允许预先存在的未提交改动，但本次运行不得新增/改变/删除任何受版本控制文件。
+- **新增护栏**：`P0-GUARD-01` 在所有 Pi 调用结束后再比对一次基线，覆盖 P0-02/P0-03 的模型调用。
+
+### FIX-02 退出条件没有考虑 `not_run`
+
+- **问题**：原逻辑只在 `failed > 0` 时返回 1。必需检查因前置失败而 `not_run` 时，脚本仍可能返回 0（“未验证”被当成“通过”）。
+- **修复**：退出判定移入 `Get-VerificationExitCode`：**无任何检查 → 1；任一 `failed` → 1；任一 `not_run` → 1；出现未知状态（拼写错误）→ 1；全部 `passed` 才 0**。并输出 `verdict:` 说明具体原因，`summary.json` 里记录 `exit_code` 与 `verdict`。
+- **反向测试**：`R10` 有一个 failed → 1、`R11` 有一个 not_run → 1（回归主项）、`R12` 空结果 → 1、`R13` 状态拼写错误 → 1、`R09` 全通过 → 0。
+
+### FIX-03 证据导出仍包含模型输出与业务文本
+
+- **问题**：原 `export-evidence.ps1` 直接把 `phase*-run.txt`、`probe-run.txt`、`full-run-console.txt`、`summary.json` 等复制进 `docs/verification/evidence/`，这些文件含 Pi 的业务问答、方案比较与 ADR 草稿。
+- **修复**：默认改为**安全模式（元数据）**：
+  - 只导出**状态、退出码、时间线和捕获流的字节数 + SHA-256**（`run-state-snapshot.md`），以及不包含提示词/模型文本的白名单元数据（`environment.txt`、`integration-status.txt`、`workflow-info.txt`）；
+  - **不导出**任何提示词、业务答复、模型输出，连截断版本也不导出；失败详情也不入仓（本地 `summary.json` 保留，可用脚本复现）；
+  - `MANIFEST.md` 内置**“拒绝导出清单”**：列出每个被扣留的本地文件及其 SHA-256 与原因，可审计但不可读内容；
+  - 原始 Pi 会话目录 `pi-sessions/` **任何模式都不导出**（目录用聚合摘要体现）；
+  - `-IncludeModelOutput`（raw 模式）**拒绝写入 git 工作树**，只能导出到仓库外；
+  - 所有导出文本经过 `Protect-EvidenceText`：`C:\Users\<name>` → `%USERPROFILE%`，`ghp_/gho_/ghs_/sk-/AKIA/xox*-` → `<redacted-*>`。
+- **反向测试**：`R14` 安全模式全目录扫描无植入业务标记、`R15` 仍保留摘要与拒绝清单（可审计）、`R16` raw 模式写入仓库必须被拒且不落盘、`R17` raw 模式导出到仓库外可用但**仍不含** Pi 会话、`R18` 路径/token 被替换。
+- **已清理历史**：旧的 `docs/verification/evidence/2026-10-17/`（含原始模型文本）已从仓库删除，并按新策略重新生成；同时修复了目录（`pi-sessions/`）被当普通文件摘要导致的崩溃。
+
+### 修复后的复跑结果
+
+| 套件 | 结果 | 退出码 |
+| --- | --- | --- |
+| `scripts/verify-p0.ps1`（P0-01/P0-02/P0-03 + 全局护栏） | **22 passed / 0 failed / 0 not_run**，`verdict: all checks passed` | 0 |
+| `tests/run-negative-tests.ps1`（反向测试） | **17 passed / 0 failed** | 0 |
+
+本次为**重新执行**，不是复用旧日志：run `cbd0b65d`（双闸门）、`5223705e`（拒绝路径）、`a6ae2440` / `c7bb434d`（P0-02 探测）。
+
+> 审查备注：“本次审查未在独立 Windows 环境复跑测试，结论基于仓库代码及已有执行证据。”——本次修复已在本机 Windows 10.0.26200 + PowerShell 5.1 环境**实际复跑**上述两个套件，日志与摘要见 `docs/verification/evidence/2026-10-17/`。
+
+---
+
+## 14. 下阶段强制要求：P0-05 的“方案语义漂移”防护
+
+审查提出：**P0-05 必须解决方案语义漂移**——人类审批时保存完整技术方案、唯一标识、版本及内容哈希，后续 Agent 不能重新解释或静默修改已经批准的方案。
+
+本轮不实现（不在 P0-01～03 范围），但把约束写成可验收的设计基线，作为 P0-05 的 Definition of Done：
+
+1. **决策卡（DecisionCard）最小字段**
+   `decision_id`（不可变唯一标识）、`requirement_id`、`options[]`（每个方案含 `option_id`、完整正文、`evidence_status`）、`selected_option_id`、`approved_by`（人类）、`approved_at`、`decision_context`、`constraints`、`revisit_triggers`、`schema_version`、`content_sha256`。
+2. **冻结语义**
+   - 审批通过时对“方案全文 + 元数据 + 版本号”计算 `content_sha256` 并随决策卡一起固化；
+   - `resume` 只传 `decision_id`（不传方案正文），下游步骤按 ID 读取已冻结快照；
+   - 后续任何步骤只能**引用**该快照，任何字段被改动 → 哈希不匹配 → 工作流**必须失败**，而不是“重新解释后继续”。
+3. **变更只能走新的决策**
+   需求变化或出现证据冲突时，必须新建 `decision_id`（版本递增）并重新进 Decision Gate；旧决策保留为历史，禁止原地覆盖。
+4. **可验收的负向测试（P0-05 必须交付）**
+   - 篡改已批准方案的任一字段 → 哈希校验失败、工作流不进入实现阶段；
+   - 传旧 `decision_id` 但内容被替换 → 拒绝执行；
+   - Agent 自行“优化”已批准方案 → 触发失败并要求人类重新审批；
+   - 未批准的方案不得出现在实现输入中（`approved_by` 为空即视为未批准）。
+5. **与工作流状态的关系**
+   `decision_id` + `content_sha256` 作为业务记录的主键；Spec Kit 的 `run_id` 只作为执行证据引用，**不得**成为业务事实的第二份真相源。
+
+该项已列入 §9 的待决策范围：`decision_id` 的生成方式、快照存放位置（文件/Git/未来数据库）需要人类确认后落地。

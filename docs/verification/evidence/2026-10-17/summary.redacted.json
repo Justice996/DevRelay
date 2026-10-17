@@ -1,0 +1,121 @@
+{
+    "generated_at":  "2026-10-17T12:41:03.4673476+08:00",
+    "phase":  "all",
+    "passed":  22,
+    "failed":  0,
+    "not_run":  0,
+    "exit_code":  0,
+    "verdict":  "all checks passed",
+    "checks":  [
+                   {
+                       "id":  "P0-01-01",
+                       "status":  "passed",
+                       "title":  "Node.js \u003e= 22 (Pi CLI requirement)"
+                   },
+                   {
+                       "id":  "P0-01-02",
+                       "status":  "passed",
+                       "title":  "Python \u003e= 3.11 (Spec Kit requirement)"
+                   },
+                   {
+                       "id":  "P0-01-03",
+                       "status":  "passed",
+                       "title":  "Pi CLI present and reports a version"
+                   },
+                   {
+                       "id":  "P0-01-04",
+                       "status":  "passed",
+                       "title":  "Spec Kit CLI present and reports a version"
+                   },
+                   {
+                       "id":  "P0-01-05",
+                       "status":  "passed",
+                       "title":  "Pi DeepSeek credentials are ready (no secret recorded)"
+                   },
+                   {
+                       "id":  "P0-01-06",
+                       "status":  "passed",
+                       "title":  "Pi answers a read-only question in an empty temp dir without creating files"
+                   },
+                   {
+                       "id":  "P0-01-07",
+                       "status":  "passed",
+                       "title":  "The inventory changed no tracked file (compared to the pre-run baseline)"
+                   },
+                   {
+                       "id":  "P0-02-01",
+                       "status":  "passed",
+                       "title":  "`specify integration status` reports pi as the default integration"
+                   },
+                   {
+                       "id":  "P0-02-02",
+                       "status":  "passed",
+                       "title":  "Pi prompt templates were installed into .pi/prompts"
+                   },
+                   {
+                       "id":  "P0-02-03",
+                       "status":  "passed",
+                       "title":  "A workflow `prompt` step really dispatches to the local Pi CLI"
+                   },
+                   {
+                       "id":  "P0-02-04",
+                       "status":  "passed",
+                       "title":  "Pi recorded which model it actually used (session evidence)"
+                   },
+                   {
+                       "id":  "P0-02-05",
+                       "status":  "passed",
+                       "title":  "The workflow file, not a human, carried the prompt (no manual copy/paste)"
+                   },
+                   {
+                       "id":  "P0-02-06",
+                       "status":  "passed",
+                       "title":  "`capture: true` returns Pi agent text into steps.\u003cid\u003e.output.stdout"
+                   },
+                   {
+                       "id":  "P0-03-01",
+                       "status":  "passed",
+                       "title":  "Smoke workflow parses and its step graph matches the reviewed contract (strict)"
+                   },
+                   {
+                       "id":  "P0-03-02",
+                       "status":  "passed",
+                       "title":  "Phase 1 (process A): run pauses at question_gate"
+                   },
+                   {
+                       "id":  "P0-03-03",
+                       "status":  "passed",
+                       "title":  "Phase 2 (process B): resume with the product answer pauses at decision_gate"
+                   },
+                   {
+                       "id":  "P0-03-04",
+                       "status":  "passed",
+                       "title":  "Phase 3 (process C): resume with decision=A completes the run"
+                   },
+                   {
+                       "id":  "P0-03-05",
+                       "status":  "passed",
+                       "title":  "All five steps completed and run state persisted under .specify/workflows/runs"
+                   },
+                   {
+                       "id":  "P0-03-06",
+                       "status":  "passed",
+                       "title":  "Completed steps were not re-executed on resume (replay only)"
+                   },
+                   {
+                       "id":  "P0-03-07",
+                       "status":  "passed",
+                       "title":  "Gate output is available to later steps ({{ steps.decision_gate.output.choice }})"
+                   },
+                   {
+                       "id":  "P0-03-08",
+                       "status":  "passed",
+                       "title":  "Reject path: a rejected gate aborts and does not walk past the review"
+                   },
+                   {
+                       "id":  "P0-GUARD-01",
+                       "status":  "passed",
+                       "title":  "Pi runs created/modified/deleted no tracked file in this repo"
+                   }
+               ]
+}

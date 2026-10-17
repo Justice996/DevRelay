@@ -1,5 +1,5 @@
 recorded_at: |
-2026-10-17T11:20:37.5687165+08:00
+2026-10-17T12:39:09.5012296+08:00
 os: |
 Microsoft Windows NT 10.0.26200.0
 powershell: |
@@ -17,7 +17,7 @@ git version 2.51.0.windows.1
 specify: |
 1.2.1
 specify_path: |
-C:\Users\13930\AppData\Local\DevRelay\tools\specify-venv\Scripts\specify.exe
+%USERPROFILE%\AppData\Local\DevRelay\tools\specify-venv\Scripts\specify.exe
 pi_path: |
 D:\pi\pi.exe
 pi_package: |
@@ -273,13 +273,10 @@ Integration status: OK
   Unchecked manifests: 0
   
 git_status: |
-?? .gitignore
-  ?? .pi/
-  ?? .specify/
-  ?? DevRelay_v0.1_%E6%9E%B6%E6%9E%84%E4%B8%8E%E9%9B%86%E6%88%90%E9%AA%8C%E8%AF%81%E4%BB%BB%E5%8A%A1.md
-  ?? DevRelay_v0.1_smoke_workflow.yml
-  ?? scripts/
-  ?? workflows/
+ M scripts/export-evidence.ps1
+   M scripts/verify-p0.ps1
+  ?? scripts/lib/
+  ?? tests/
   
 pi_default_provider: |
 deepseek-proxy

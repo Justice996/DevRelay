@@ -1,3 +1,5 @@
+--- exit: 0
+--- stdout ---
 
 DevRelay Business Collaboration Smoke Test (devrelay-smoke)
   Version:     0.1.0
@@ -16,3 +18,5 @@ DevRelay Business Collaboration Smoke Test (devrelay-smoke)
     → propose_architecture [prompt]
     → decision_gate [gate]
     → report_choice [prompt]
+
+--- stderr ---
