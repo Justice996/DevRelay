@@ -1,0 +1,38 @@
+# DevRelay P0-02: read-only probe that proves Spec Kit dispatches to the local Pi CLI
+# without any manual copy/paste of the prompt into an interactive Pi session.
+#
+# Deliberately:
+#   * one single `prompt` step (no gate, no shell, no file writes)
+#   * no `capture: true` because the Spec Kit `pi` integration would then append
+#     `--output-format json`, which the installed Pi CLI (0.86.1) does not accept.
+#     See docs/verification/P0-01-P0-03-integration-report.md.
+schema_version: "1.0"
+workflow:
+  id: "devrelay-p0-02-probe"
+  name: "P0-02 Pi read-only probe"
+  version: "0.1.0"
+  author: "DevRelay"
+  description: "Checks that Spec Kit can call the local Pi coding agent for a read-only prompt"
+
+requires:
+  integrations:
+    any:
+      - pi
+
+inputs:
+  spec:
+    type: string
+    required: true
+    prompt: "Describe the business requirement"
+
+steps:
+  - id: read_only_probe
+    type: prompt
+    integration: pi
+    timeout: 180
+    prompt: >-
+      这是一个只读连通性探测。不要读取或写入任何文件，不要执行任何命令，不要调用工具。
+      需求背景：{{ inputs.spec }}。
+      请只输出一段中文，格式严格为：第一行 PROBE_OK，第二行用一句话说明这项需求在开始实现前
+      最需要向业务方确认的一件事。
+    continue_on_error: false

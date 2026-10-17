@@ -1,0 +1,11 @@
+# Keep the repository diffable across Windows/POSIX checkouts.
+* text=auto
+
+# PowerShell scripts are executed on Windows; CRLF avoids surprises there.
+*.ps1 text eol=crlf
+
+# Docs/workflows are read by tools and by humans on any OS.
+*.md   text eol=lf
+*.yml  text eol=lf
+*.json text eol=lf
+*.txt  text eol=lf

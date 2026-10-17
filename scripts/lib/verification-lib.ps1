@@ -1,0 +1,383 @@
+﻿<#
+.SYNOPSIS
+    Shared verification primitives for DevRelay P0 checks.
+
+.DESCRIPTION
+    Dot-source this file. Everything here is a pure function over text/objects so
+    that `tests\run-negative-tests.ps1` can prove the assertions actually fail on
+    bad input (a check that can never fail is not a check).
+
+    Contents:
+      * ConvertFrom-WorkflowInfoText  - parse `specify workflow info` output
+      * Test-WorkflowInfoStrict       - strict assertions over that output
+      * Get-VerificationExitCode      - results -> process exit code
+      * Get-VerificationExitReason    - human-readable reason for that code
+      * Protect-EvidenceText          - strip personal paths / token shapes
+#>
+
+Set-StrictMode -Version 2.0
+
+function ConvertFrom-WorkflowInfoText {
+    <#
+        Parses the text emitted by `specify workflow info <path|id>`.
+
+        Header:  "<Name> (<workflow-id>)"
+        Steps:   "  Steps (5):"
+                 "    → identify_business_gap [prompt]"
+
+        Throws when the shape is not recognised, so a parser drift caused by a
+        Spec Kit upgrade surfaces as a failed check instead of a silently empty
+        step list.
+    #>
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
+
+    $lines = $Text -split "`r?`n"
+
+    $header = $null
+    foreach ($line in $lines) {
+        if ($line -match '^\s*(?<name>.+?)\s+\((?<id>[A-Za-z0-9][A-Za-z0-9._-]*)\)\s*$') {
+            $header = [pscustomobject]@{ Name = $Matches.name.Trim(); WorkflowId = $Matches.id }
+            break
+        }
+    }
+    if ($null -eq $header) { throw 'could not parse the workflow name/id header from `specify workflow info`' }
+
+    $declaredCount = $null
+    foreach ($line in $lines) {
+        if ($line -match '^\s*Steps\s*\((?<n>\d+)\)\s*:') { $declaredCount = [int]$Matches.n; break }
+    }
+    if ($null -eq $declaredCount) { throw 'could not find the "Steps (N):" section header' }
+
+    $steps = New-Object System.Collections.ArrayList
+    foreach ($line in $lines) {
+        if ($line -match '^\s*[\u2192>-]\s*(?<id>[A-Za-z0-9][A-Za-z0-9._-]*)\s*\[(?<type>[a-z][a-z-]*)\]') {
+            [void]$steps.Add([pscustomobject]@{ Id = $Matches.id; Type = $Matches.type })
+        }
+    }
+
+    [pscustomobject]@{
+        Name          = $header.Name
+        WorkflowId    = $header.WorkflowId
+        DeclaredCount = $declaredCount
+        Steps         = @($steps)
+    }
+}
+
+function Test-WorkflowInfoStrict {
+    <#
+        Returns an array of problems (empty array == every assertion held).
+
+        Assertions:
+          1. the CLI exit code is 0
+          2. the workflow id matches
+          3. the "Steps (N)" count equals the number of parsed steps
+          4. the step id sequence matches exactly (order matters)
+          5. the step type sequence matches exactly
+    #>
+    param(
+        [Parameter(Mandatory)][AllowNull()][System.Nullable[int]]$ExitCode,
+        [AllowEmptyString()][string]$StdOut = '',
+        [AllowEmptyString()][string]$StdErr = '',
+        [string[]]$ExpectedStepIds = @(),
+        [string[]]$ExpectedStepTypes = @(),
+        [string]$ExpectedWorkflowId = ''
+    )
+
+    $problems = New-Object System.Collections.ArrayList
+
+    if ($null -eq $ExitCode) {
+        [void]$problems.Add('workflow info exit code was not captured')
+    } elseif ($ExitCode -ne 0) {
+        [void]$problems.Add("workflow info exited with code $ExitCode (expected 0)")
+    }
+
+    $combined = "$StdOut`n$StdErr"
+    $info = $null
+    try {
+        $info = ConvertFrom-WorkflowInfoText -Text $combined
+    } catch {
+        [void]$problems.Add("workflow info output could not be parsed: $($_.Exception.Message)")
+        return @($problems)
+    }
+
+    if ($ExpectedWorkflowId -and $info.WorkflowId -ne $ExpectedWorkflowId) {
+        [void]$problems.Add("workflow id is '$($info.WorkflowId)', expected '$ExpectedWorkflowId'")
+    }
+
+    if ($info.DeclaredCount -ne $info.Steps.Count) {
+        [void]$problems.Add("header declares $($info.DeclaredCount) steps but $($info.Steps.Count) were parsed")
+    }
+
+    if ($ExpectedStepIds.Count -gt 0) {
+        $actualIds = @($info.Steps | ForEach-Object { $_.Id })
+        if ($actualIds.Count -ne $ExpectedStepIds.Count) {
+            [void]$problems.Add("step count is $($actualIds.Count), expected $($ExpectedStepIds.Count) (actual: $($actualIds -join ','))")
+        } else {
+            for ($i = 0; $i -lt $ExpectedStepIds.Count; $i++) {
+                if ($actualIds[$i] -ne $ExpectedStepIds[$i]) {
+                    [void]$problems.Add("step $($i + 1) id is '$($actualIds[$i])', expected '$($ExpectedStepIds[$i])'")
+                }
+            }
+        }
+    }
+
+    if ($ExpectedStepTypes.Count -gt 0) {
+        $actualTypes = @($info.Steps | ForEach-Object { $_.Type })
+        if ($actualTypes.Count -ne $ExpectedStepTypes.Count) {
+            [void]$problems.Add("step type count is $($actualTypes.Count), expected $($ExpectedStepTypes.Count) (actual: $($actualTypes -join ','))")
+        } else {
+            for ($i = 0; $i -lt $ExpectedStepTypes.Count; $i++) {
+                if ($actualTypes[$i] -ne $ExpectedStepTypes[$i]) {
+                    [void]$problems.Add("step $($i + 1) type is '$($actualTypes[$i])', expected '$($ExpectedStepTypes[$i])'")
+                }
+            }
+        }
+    }
+
+    return @($problems)
+}
+
+function Get-VerificationExitCode {
+    <#
+        A verification run may only report success when every check actually ran
+        AND passed.
+
+        Rules (in order):
+          * no checks at all            -> 1 (nothing was proven)
+          * any check status 'failed'   -> 1
+          * any check status 'not_run'  -> 1 (skipped is not passed)
+          * anything other than the two known-good statuses -> 1 (typo guard)
+          * otherwise                   -> 0
+    #>
+    param([AllowNull()][object[]]$Results)
+
+    $all = @($Results | Where-Object { $null -ne $_ })
+    if ($all.Count -eq 0) { return 1 }
+
+    if (@($all | Where-Object { $_.Status -eq 'failed' }).Count -gt 0) { return 1 }
+    if (@($all | Where-Object { $_.Status -eq 'not_run' }).Count -gt 0) { return 1 }
+
+    $unknown = @($all | Where-Object { $_.Status -ne 'passed' })
+    if ($unknown.Count -gt 0) { return 1 }
+
+    return 0
+}
+
+function Get-VerificationExitReason {
+    param([AllowNull()][object[]]$Results)
+
+    $all = @($Results | Where-Object { $null -ne $_ })
+    if ($all.Count -eq 0) { return 'no checks ran: nothing was verified' }
+
+    $failed = @($all | Where-Object { $_.Status -eq 'failed' })
+    $notRun = @($all | Where-Object { $_.Status -eq 'not_run' })
+    $unknown = @($all | Where-Object { $_.Status -ne 'passed' -and $_.Status -ne 'failed' -and $_.Status -ne 'not_run' })
+
+    $parts = New-Object System.Collections.ArrayList
+    if ($failed.Count -gt 0) { [void]$parts.Add("$($failed.Count) failed: $(($failed | ForEach-Object { $_.Id }) -join ', ')") }
+    if ($notRun.Count -gt 0) { [void]$parts.Add("$($notRun.Count) not_run (a required check did not execute): $(($notRun | ForEach-Object { $_.Id }) -join ', ')") }
+    if ($unknown.Count -gt 0) { [void]$parts.Add("$($unknown.Count) in an unknown status") }
+    if ($parts.Count -eq 0) { return 'all checks passed' }
+
+    return ($parts -join '; ')
+}
+
+function Protect-EvidenceText {
+    <#
+        Removes personally identifying paths and anything that looks like a
+        credential from text that is about to be written under version control.
+
+        Returns the sanitised string plus a count of replacements so callers can
+        report that redaction happened.
+    #>
+    param([AllowEmptyString()][string]$Text)
+
+    $count = 0
+    $result = $Text
+
+    $patterns = @(
+        @{ Pattern = '(?i)C:\\Users\\[^\\\s"'']+'; Replacement = '%USERPROFILE%' },
+        @{ Pattern = '(?i)/home/[^/\s"'']+';        Replacement = '~' },
+        @{ Pattern = '(?i)/Users/[^/\s"'']+';       Replacement = '~' },
+        @{ Pattern = 'gh[pous]_[A-Za-z0-9]{16,}';   Replacement = '<redacted-token>' },
+        @{ Pattern = 'github_pat_[A-Za-z0-9_]{16,}'; Replacement = '<redacted-token>' },
+        @{ Pattern = 'sk-[A-Za-z0-9]{16,}';         Replacement = '<redacted-key>' },
+        @{ Pattern = 'AKIA[0-9A-Z]{16}';            Replacement = '<redacted-key>' },
+        @{ Pattern = 'xox[baprs]-[A-Za-z0-9-]{10,}'; Replacement = '<redacted-token>' }
+    )
+
+    foreach ($p in $patterns) {
+        $matches = [regex]::Matches($result, $p.Pattern)
+        if ($matches.Count -gt 0) {
+            $count += $matches.Count
+            $result = [regex]::Replace($result, $p.Pattern, $p.Replacement)
+        }
+    }
+
+    [pscustomobject]@{ Text = $result; Replacements = $count }
+}
+
+function Get-WorktreeSnapshot {
+    <#
+        Snapshot of the tracked working tree that is sensitive to CONTENT, not
+        just to `git status` text (VERIFICATION-FIX-M1).
+
+        Why: `git status --porcelain` collapses "already modified" and "modified
+        again" into the same string (` M path`). A run that edits an
+        already-dirty file would be invisible to a status-only comparison.
+
+        Returns:
+          PorcelainEntries - sorted porcelain lines (additions/deletions/renames)
+          Files            - repo-relative path -> SHA-256 of the worktree bytes
+                             ('<missing>' when the tracked file is absent)
+          FileCount        - number of tracked files hashed
+    #>
+    param([Parameter(Mandatory)][string]$RepoRoot)
+
+    $porcelainRaw = (& git -C $RepoRoot status --porcelain 2>&1 | Out-String).TrimEnd()
+    $entries = @()
+    if (-not [string]::IsNullOrWhiteSpace($porcelainRaw)) {
+        $entries = @($porcelainRaw -split "`r?`n" | ForEach-Object { $_.TrimEnd() } | Sort-Object)
+    }
+
+    # core.quotePath=false keeps non-ASCII file names literal instead of
+    # octal-escaped, so the same file maps to the same key in both snapshots.
+    $trackedRaw = & git -C $RepoRoot -c core.quotePath=false ls-files 2>&1
+    $files = @{}
+    foreach ($rel in @($trackedRaw)) {
+        if ([string]::IsNullOrWhiteSpace($rel)) { continue }
+        $rel = $rel.TrimEnd("`r")
+        $full = Join-Path $RepoRoot $rel
+        if (Test-Path -LiteralPath $full -PathType Leaf) {
+            $digest = Get-TextDigest -Path $full
+            $files[$rel] = $digest.Sha256
+        } else {
+            $files[$rel] = '<missing>'
+        }
+    }
+
+    [pscustomobject]@{
+        PorcelainEntries = $entries
+        Files            = $files
+        FileCount        = $files.Count
+    }
+}
+
+function Compare-WorktreeSnapshot {
+    <#
+        Returns an array of human-readable problems (empty == identical).
+
+        Catches:
+          * entries added/removed from `git status` (new/deleted/renamed files)
+          * CONTENT changes to any tracked file, including files that were
+            already dirty in the baseline snapshot (the M1 gap)
+    #>
+    param(
+        [Parameter(Mandatory)][object]$Baseline,
+        [Parameter(Mandatory)][object]$Current
+    )
+
+    $problems = New-Object System.Collections.ArrayList
+
+    $beforeEntries = @($Baseline.PorcelainEntries)
+    $afterEntries = @($Current.PorcelainEntries)
+    $newEntries = @($afterEntries | Where-Object { $beforeEntries -notcontains $_ })
+    $goneEntries = @($beforeEntries | Where-Object { $afterEntries -notcontains $_ })
+    if ($newEntries.Count -gt 0) { [void]$problems.Add("git status gained: $($newEntries -join '; ')") }
+    if ($goneEntries.Count -gt 0) { [void]$problems.Add("git status lost: $($goneEntries -join '; ')") }
+
+    $beforeFiles = $Baseline.Files
+    $afterFiles = $Current.Files
+    $allPaths = @(@($beforeFiles.Keys) + @($afterFiles.Keys) | Sort-Object -Unique)
+    $changed = New-Object System.Collections.ArrayList
+    foreach ($path in $allPaths) {
+        $was = if ($beforeFiles.ContainsKey($path)) { $beforeFiles[$path] } else { '<absent>' }
+        $now = if ($afterFiles.ContainsKey($path)) { $afterFiles[$path] } else { '<absent>' }
+        if ($was -ne $now) { [void]$changed.Add($path) }
+    }
+    if ($changed.Count -gt 0) {
+        [void]$problems.Add("tracked file content changed: $(($changed | Sort-Object) -join '; ')")
+    }
+
+    return @($problems)
+}
+
+function Test-SensitiveLeak {
+    <#
+        Last line of defence for evidence that is about to be published.
+
+        This is a *detector*, not a guarantee: it can only find what it is told
+        to look for (explicit literals, the current user profile path, token
+        shapes). Free text that cannot be classified safely must not be exported
+        at all — that is a policy decision made by the caller, not by this
+        function.
+
+        Returns an array of finding descriptions (empty == nothing detected).
+        Finding text never echoes the sensitive value itself.
+    #>
+    param(
+        [AllowEmptyString()][string]$Text,
+        [string[]]$ForbidLiterals = @(),
+        [string]$UserProfilePath = $env:USERPROFILE
+    )
+
+    $findings = New-Object System.Collections.ArrayList
+    if ([string]::IsNullOrEmpty($Text)) { return @($findings) }
+
+    foreach ($literal in $ForbidLiterals) {
+        if ([string]::IsNullOrEmpty($literal)) { continue }
+        if ($Text.IndexOf($literal, [System.StringComparison]::Ordinal) -ge 0) {
+            [void]$findings.Add("an explicitly forbidden literal is present (length $($literal.Length))")
+        }
+    }
+
+    if (-not [string]::IsNullOrEmpty($UserProfilePath)) {
+        $variants = @($UserProfilePath, ($UserProfilePath -replace '\\', '/'))
+        foreach ($variant in $variants) {
+            if ($Text.IndexOf($variant, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                [void]$findings.Add('the local user profile path is present')
+                break
+            }
+        }
+    }
+
+    $tokenPatterns = @(
+        'gh[pousr]_[A-Za-z0-9]{16,}',
+        'github_pat_[A-Za-z0-9_]{16,}',
+        'sk-[A-Za-z0-9]{16,}',
+        'AKIA[0-9A-Z]{16}',
+        'xox[baprs]-[A-Za-z0-9-]{10,}'
+    )
+    foreach ($pattern in $tokenPatterns) {
+        if ([regex]::IsMatch($Text, $pattern)) { [void]$findings.Add('a credential-shaped token is present') }
+    }
+
+    return @($findings)
+}
+
+function Get-TextDigest {
+    <#
+        Length + SHA-256 of a string or file, for provenance without content.
+    #>
+    <#
+        Length + SHA-256 of a string or file, for provenance without content.
+    #>
+    param(
+        [AllowEmptyString()][string]$Text,
+        [string]$Path
+    )
+
+    if ($PSBoundParameters.ContainsKey('Path')) {
+        if (-not (Test-Path $Path)) { return [pscustomobject]@{ Length = 0; Sha256 = '' } }
+        $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $Path).Path)
+    } else {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)
+    }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = [System.BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $sha.Dispose()
+    }
+    [pscustomobject]@{ Length = $bytes.Length; Sha256 = $hash }
+}

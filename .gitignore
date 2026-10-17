@@ -1,0 +1,16 @@
+# --- DevRelay: local run state & evidence (never committed) -----------------
+# Spec Kit workflow run state may contain raw model output and business text.
+.specify/workflows/runs/
+# Pi sessions written by the P0-02/P0-03 probes (contain model + prompt traces).
+.p0-evidence/
+# Pi keeps credentials/agent state in .pi/agent; only .pi/prompts is a project asset.
+.pi/agent/
+.pi/auth.json
+# Local tooling / isolated interpreter used to install Spec Kit.
+.venv/
+*.pyc
+__pycache__/
+
+# --- OS noise ---------------------------------------------------------------
+Thumbs.db
+Desktop.ini

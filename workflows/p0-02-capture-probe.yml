@@ -1,0 +1,41 @@
+# DevRelay P0-02 (capability probe): does `capture: true` work with the Pi integration?
+#
+# DevRelay needs the agent's *text* back (a business question, an option table) so
+# it can be turned into a structured card. A streaming `prompt` step only leaves
+# `output.exit_code`; `capture: true` puts the agent's stdout/stderr into
+# `steps.<id>.output.stdout`, which later steps (or an external reader of
+# state.json) can consume.
+#
+# Note on the adapter internals: Spec Kit's MarkdownIntegration appends
+# `--output-format json` to the agent argv when it is asked for
+# `output_json=True`. Pi 0.86.1 has no such flag (it uses `--mode json`), but
+# workflow `prompt`/`command` steps always request text output
+# (`output_json=False`) — including when capturing — so the flag is never
+# emitted here. This workflow asserts that captured text really arrives.
+schema_version: "1.0"
+workflow:
+  id: "devrelay-p0-02-capture-probe"
+  name: "P0-02 captured-output probe"
+  version: "0.1.0"
+  author: "DevRelay"
+  description: "Checks that capture:true returns the Pi agent's text to the workflow"
+
+requires:
+  integrations:
+    any:
+      - pi
+
+inputs:
+  spec:
+    type: string
+    default: "probe"
+
+steps:
+  - id: capture_probe
+    type: prompt
+    integration: pi
+    timeout: 120
+    capture: true
+    capture_max_bytes: 8192
+    prompt: >-
+      只输出两个字符：OK。不要调用任何工具，不要解释。
