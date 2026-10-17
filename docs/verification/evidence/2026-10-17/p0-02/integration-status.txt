@@ -1,0 +1,9 @@
+Integration status: OK
+Default integration: pi
+Installed integrations: pi
+Multi-install safe: yes
+Shared templates target alignment: pi
+Modified managed files: 0
+Missing managed files: 0
+Invalid manifest paths: 0
+Unchecked manifests: 0

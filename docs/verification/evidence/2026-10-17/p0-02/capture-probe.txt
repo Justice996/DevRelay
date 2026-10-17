@@ -1,0 +1,12 @@
+C:\Users\13930\AppData\Local\DevRelay\tools\specify-venv\Scripts\specify.exe workflow run .\workflows\p0-02-capture-probe.yml --json
+--- exit: 0
+--- stdout ---
+{
+  "run_id": "6df6aafe",
+  "workflow_id": "devrelay-p0-02-capture-probe",
+  "status": "completed",
+  "current_step_id": "capture_probe",
+  "current_step_index": 0
+}
+
+--- stderr ---

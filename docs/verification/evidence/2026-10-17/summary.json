@@ -1,0 +1,137 @@
+{
+    "generated_at":  "2026-10-17T11:23:23.4590116+08:00",
+    "phase":  "all",
+    "specify":  "C:\\Users\\13930\\AppData\\Local\\DevRelay\\tools\\specify-venv\\Scripts\\specify.exe",
+    "pi_extra":  "--tools read,grep,find,ls --session-dir \"C:\\Users\\13930\\Desktop\\DevRelay\\.p0-evidence\\pi-sessions\"",
+    "passed":  21,
+    "failed":  0,
+    "not_run":  0,
+    "checks":  [
+                   {
+                       "Id":  "P0-01-01",
+                       "Title":  "Node.js \u003e= 22 (Pi CLI requirement)",
+                       "Status":  "passed",
+                       "Detail":  "node v22.21.1"
+                   },
+                   {
+                       "Id":  "P0-01-02",
+                       "Title":  "Python \u003e= 3.11 (Spec Kit requirement)",
+                       "Status":  "passed",
+                       "Detail":  "python 3.13.2"
+                   },
+                   {
+                       "Id":  "P0-01-03",
+                       "Title":  "Pi CLI present and reports a version",
+                       "Status":  "passed",
+                       "Detail":  "pi 0.86.1 (package @earendil-works/pi-coding-agent)"
+                   },
+                   {
+                       "Id":  "P0-01-04",
+                       "Title":  "Spec Kit CLI present and reports a version",
+                       "Status":  "passed",
+                       "Detail":  "specify 1.2.1"
+                   },
+                   {
+                       "Id":  "P0-01-05",
+                       "Title":  "Pi DeepSeek credentials are ready (no secret recorded)",
+                       "Status":  "passed",
+                       "Detail":  "{\"status\":\"ready\",\"provider\":\"deepseek-proxy\",\"authType\":\"api_key\"}"
+                   },
+                   {
+                       "Id":  "P0-01-06",
+                       "Title":  "Pi answers a read-only question in an empty temp dir without creating files",
+                       "Status":  "passed",
+                       "Detail":  "exit 0, 41 chars, 0 files created in C:\\Users\\13930\\AppData\\Local\\Temp\\devrelay-p0-01-3a4a0647"
+                   },
+                   {
+                       "Id":  "P0-01-07",
+                       "Title":  "No tracked file was modified by the inventory",
+                       "Status":  "passed",
+                       "Detail":  "working tree has no staged/modified tracked files"
+                   },
+                   {
+                       "Id":  "P0-02-01",
+                       "Title":  "`specify integration status` reports pi as the default integration",
+                       "Status":  "passed",
+                       "Detail":  "Default integration: pi, multi-install safe"
+                   },
+                   {
+                       "Id":  "P0-02-02",
+                       "Title":  "Pi prompt templates were installed into .pi/prompts",
+                       "Status":  "passed",
+                       "Detail":  "10 templates: speckit.analyze.md, speckit.checklist.md, speckit.clarify.md, speckit.constitution.md, speckit.converge.md, speckit.implement.md, speckit.plan.md, speckit.specify.md, speckit.tasks.md, speckit.taskstoissues.md"
+                   },
+                   {
+                       "Id":  "P0-02-03",
+                       "Title":  "A workflow `prompt` step really dispatches to the local Pi CLI",
+                       "Status":  "passed",
+                       "Detail":  "run d5268d9c completed in a fresh process; dispatched=True exit_code=0"
+                   },
+                   {
+                       "Id":  "P0-02-04",
+                       "Title":  "Pi recorded which model it actually used (session evidence)",
+                       "Status":  "passed",
+                       "Detail":  "deepseek-proxy/deepseek-v4.1-flash-expires-on-0910 (from 2026-10-17T03-21-14-264Z_01a147e0-c118-711c-995e-cc7211a2f61e.jsonl)"
+                   },
+                   {
+                       "Id":  "P0-02-05",
+                       "Title":  "The workflow file, not a human, carried the prompt (no manual copy/paste)",
+                       "Status":  "passed",
+                       "Detail":  "workflow declares `type: prompt` + `integration: pi`; the harness never feeds prompt text into an interactive Pi session"
+                   },
+                   {
+                       "Id":  "P0-02-06",
+                       "Title":  "`capture: true` returns Pi agent text into steps.\u003cid\u003e.output.stdout",
+                       "Status":  "passed",
+                       "Detail":  "run 6df6aafe captured 2 chars of agent text: \u0027OK\u0027"
+                   },
+                   {
+                       "Id":  "P0-03-01",
+                       "Title":  "Smoke workflow parses against the installed Spec Kit version",
+                       "Status":  "passed",
+                       "Detail":  "Steps (5): | → identify_business_gap [prompt] | → question_gate [gate] | → propose_architecture [prompt] | → decision_gate [gate] | → report_choice [prompt]"
+                   },
+                   {
+                       "Id":  "P0-03-02",
+                       "Title":  "Phase 1 (process A): run pauses at question_gate",
+                       "Status":  "passed",
+                       "Detail":  "run 7c0167a8 status=paused at question_gate (gate choice=)"
+                   },
+                   {
+                       "Id":  "P0-03-03",
+                       "Title":  "Phase 2 (process B): resume with the product answer pauses at decision_gate",
+                       "Status":  "passed",
+                       "Detail":  "same run resumed in a new process -\u003e status=paused at decision_gate"
+                   },
+                   {
+                       "Id":  "P0-03-04",
+                       "Title":  "Phase 3 (process C): resume with decision=A completes the run",
+                       "Status":  "passed",
+                       "Detail":  "status=completed"
+                   },
+                   {
+                       "Id":  "P0-03-05",
+                       "Title":  "All five steps completed and run state persisted under .specify/workflows/runs",
+                       "Status":  "passed",
+                       "Detail":  "5/5 completed; state.json + inputs.json + log.jsonl present in C:\\Users\\13930\\Desktop\\DevRelay\\.specify\\workflows\\runs\\7c0167a8"
+                   },
+                   {
+                       "Id":  "P0-03-06",
+                       "Title":  "Completed steps were not re-executed on resume (replay only)",
+                       "Status":  "passed",
+                       "Detail":  "identify_business_gap=1 start, propose_architecture=1 start, question_gate=2 starts (pause then verdict)"
+                   },
+                   {
+                       "Id":  "P0-03-07",
+                       "Title":  "Gate output is available to later steps ({{ steps.decision_gate.output.choice }})",
+                       "Status":  "passed",
+                       "Detail":  "report_choice prompt interpolated the recorded human verdict A"
+                   },
+                   {
+                       "Id":  "P0-03-08",
+                       "Title":  "Reject path: a rejected gate aborts and does not walk past the review",
+                       "Status":  "passed",
+                       "Detail":  "run 3f3e5a61 aborted at question_gate (exit 1); no later step started"
+                   }
+               ]
+}

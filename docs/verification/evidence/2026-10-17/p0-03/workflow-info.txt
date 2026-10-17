@@ -1,0 +1,18 @@
+
+DevRelay Business Collaboration Smoke Test (devrelay-smoke)
+  Version:     0.1.0
+  Author:      DevRelay
+  Description: Verify two human gates with Pi plus a DeepSeek model
+
+  Inputs:
+    spec (string) — required
+    product_answer (string) — optional
+    question_verdict (string) — optional
+    decision_verdict (string) — optional
+
+  Steps (5):
+    → identify_business_gap [prompt]
+    → question_gate [gate]
+    → propose_architecture [prompt]
+    → decision_gate [gate]
+    → report_choice [prompt]

@@ -1,0 +1,73 @@
+# DevRelay v0.1: smoke test of Spec Kit -> Pi -> two human gates.
+# Runs only inside a disposable checkout. No production resources.
+# Validate against the locally installed Spec Kit release before use.
+schema_version: "1.0"
+workflow:
+  id: "devrelay-smoke"
+  name: "DevRelay Business Collaboration Smoke Test"
+  version: "0.1.0"
+  author: "DevRelay"
+  description: "Verify two human gates with Pi plus a DeepSeek model"
+
+requires:
+  integrations:
+    any:
+      - pi
+
+inputs:
+  spec:
+    type: string
+    required: true
+    prompt: "Describe the business requirement"
+  product_answer:
+    type: string
+    default: ""
+  question_verdict:
+    type: string
+    default: ""
+    enum: ["", approve, reject]
+  decision_verdict:
+    type: string
+    default: ""
+    enum: ["", A, B, C, reject]
+
+steps:
+  - id: identify_business_gap
+    type: prompt
+    integration: pi
+    prompt: >-
+      仅分析，不读写生产数据，也不要修改任何项目文件。
+      用户需求：{{ inputs.spec }}。
+      请指出一个必须向真实产品经理确认的业务问题，并用普通产品经理能理解的中文写出问句，说明为什么需要问。
+
+  - id: question_gate
+    type: gate
+    message: "请先向产品确认上一步的业务问题。获得答复后，用 resume 同时传入 product_answer 和 question_verdict=approve。"
+    options: [approve, reject]
+    on_reject: abort
+    verdict_input: question_verdict
+
+  - id: propose_architecture
+    type: prompt
+    integration: pi
+    prompt: >-
+      仅分析，不修改任何项目文件。需求：{{ inputs.spec }}。
+      产品答复：{{ inputs.product_answer }}。
+      请比较三种实现：A MySQL条件更新，B Redis协调+MySQL，C 异步队列+MySQL。
+      对每种说明适用业务、优点、缺点、成本、风险；推荐一个并标注哪些结论尚未通过实测。
+
+  - id: decision_gate
+    type: gate
+    message: "查看上一步方案比较。请输入 A/B/C 或 reject，并通过 resume 提交。"
+    options: [A, B, C, reject]
+    on_reject: abort
+    verdict_input: decision_verdict
+
+  - id: report_choice
+    type: prompt
+    integration: pi
+    prompt: >-
+      仅生成文字，不修改文件。需求：{{ inputs.spec }}。
+      产品答复：{{ inputs.product_answer }}。
+      人类选择的技术方案为 {{ steps.decision_gate.output.choice }}。
+      请起草简短 ADR 要点和独立业务验收标准；注明这是演示草稿，未经实际测试。
